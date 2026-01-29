@@ -14,7 +14,8 @@ import datetime
 import json
 import math
 import os
-from typing import Dict, List, Optional, Tuple
+import traceback
+from typing import Any, Dict, List, Optional, Tuple
 
 import omni.kit.app
 import omni.log
@@ -345,7 +346,25 @@ class CommandsMixin:
             total_stats_text = f"\\n\\n━━━ Total Stats (Step 1 + Step 2) ━━━\\n⏱ Time: {total_time:.2f}s | 📥 Prompt: {total_prompt_tokens:,} | 📤 Completion: {total_completion_tokens:,} | 📊 Total: {total_tokens:,}"
             self._analysis_text_model.as_string += total_stats_text
             self._analysis_text_model.as_string += "\n\nChecking collisions..."
-            be.step3_check_collisions(layout_json)
+            collision_results = be.step3_check_collisions(layout_json)
+
+            # ログを保存
+            log_path = self._save_generation_log(
+                step1_stats=step1_stats,
+                step2_stats=step2_stats,
+                analysis_text=analysis_text,
+                layout_json=layout_json,
+                collision_results=collision_results,
+                model_name=model_name,
+                step2_model_name=step2_model_name,
+                ai_overrides=ai_overrides,
+                image_path=self._image_path,
+                prompt1_text=prompt1_text,
+                prompt2_text=prompt2_text,
+                dimensions_text=dimensions_text
+            )
+            if log_path:
+                self._analysis_text_model.as_string += f"\nDetailed log saved to: {log_path}"
 
             # --- 5. ステップ4/5: アセット配置 ---
             self._layout_json = layout_json
@@ -450,14 +469,33 @@ class CommandsMixin:
             omni.log.info("=== Step 3: Checking collisions ===")
             total_stats_text = f"\\n\\n━━━ Total Stats (Step 1 + Step 2) ━━━\\n⏱ Time: {total_time:.2f}s | 📥 Prompt: {total_prompt_tokens:,} | 📤 Completion: {total_completion_tokens:,} | 📊 Total: {total_tokens:,}"
             self._analysis_text_model.as_string += total_stats_text
-            self._analysis_text_model.as_string += "\n\nChecking collisions..."
-            be.step3_check_collisions(layout_json)
+            # --- ステップ3: 衝突検出 ---
+            omni.log.info("=== Step 3: Checking collisions ===")
+            collision_results = be.step3_check_collisions(layout_json)
 
-            # --- ステップ4/5: アセット配置 ---
+            # ログを保存
+            log_path = self._save_generation_log(
+                step1_stats=step1_stats,
+                step2_stats=step2_stats,
+                analysis_text=analysis_text,
+                layout_json=layout_json,
+                collision_results=collision_results,
+                model_name=model_name,
+                step2_model_name=step2_model_name,
+                ai_overrides=ai_overrides,
+                image_path=self._image_path,
+                prompt1_text=prompt2_text, # ※このケースではStep2から開始
+                prompt2_text=prompt2_text,
+                dimensions_text=dimensions_text,
+                tag="step2_only"
+            )
+            if log_path:
+                self._analysis_text_model.as_string += f"\nDetailed log saved to: {log_path}"
+
+            # --- ステップ4以降: アセット検索と配置 ---
             self._layout_json = layout_json
-            self._analysis_text_model.as_string += "\nStarting asset placement..."
-
-            # _start_asset_searchはすでに非同期タスクとして動作
+            self._analysis_text_model.as_string += "\n\nStarting asset placement..."
+            self._start_asset_search(self._layout_json)
             self._start_asset_search(self._layout_json)
 
             self._analysis_text_model.as_string += "\n\nProcess finished."
@@ -1868,4 +1906,111 @@ class CommandsMixin:
             omni.log.error(f"[Vector Search] Unexpected error: {exc}")
             import traceback
             omni.log.error(f"Stack trace:\n{traceback.format_exc()}")
+            return None
+
+    def _save_generation_log(
+        self,
+        step1_stats: Dict[str, Any],
+        step2_stats: Dict[str, Any],
+        analysis_text: str,
+        layout_json: Dict[str, Any],
+        collision_results: List[Tuple[str, str, float]],
+        model_name: str,
+        step2_model_name: str,
+        ai_overrides: Dict[str, Any],
+        image_path: str,
+        prompt1_text: str,
+        prompt2_text: str,
+        dimensions_text: str,
+        tag: str = "full"
+    ) -> Optional[str]:
+        """AI生成の全行程をログファイルに保存する"""
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            log_dir = self._get_log_dir()
+            os.makedirs(log_dir, exist_ok=True)
+            
+            log_filename = f"{timestamp}_{tag}.log"
+            log_path = os.path.join(log_dir, log_filename)
+
+            total_time = (step1_stats.get("time", 0) or 0) + (step2_stats.get("time", 0) or 0)
+            total_prompt = (step1_stats.get("prompt_tokens", 0) or 0) + (step2_stats.get("prompt_tokens", 0) or 0)
+            total_completion = (step1_stats.get("completion_tokens", 0) or 0) + (step2_stats.get("completion_tokens", 0) or 0)
+            total_tokens = (step1_stats.get("total_tokens", 0) or 0) + (step2_stats.get("total_tokens", 0) or 0)
+
+            lines = []
+            lines.append("AI Layout Generation Log")
+            lines.append(f"timestamp: {timestamp}")
+            lines.append("")
+            lines.append("[AI Settings]")
+            lines.append(f"step1_model: {model_name}")
+            lines.append(f"step2_model: {step2_model_name}")
+            for k, v in ai_overrides.items():
+                lines.append(f"{k}: {v}")
+            lines.append("")
+            
+            lines.append("[Step 1 Stats]")
+            lines.append(f"time_sec: {step1_stats.get('time', 0)}")
+            lines.append(f"input_tokens: {step1_stats.get('prompt_tokens', 0)}")
+            lines.append(f"output_tokens: {step1_stats.get('completion_tokens', 0)}")
+            lines.append(f"total_tokens: {step1_stats.get('total_tokens', 0)}")
+            lines.append("")
+
+            lines.append("[Step 2 Stats]")
+            lines.append(f"time_sec: {step2_stats.get('time', 0)}")
+            lines.append(f"input_tokens: {step2_stats.get('prompt_tokens', 0)}")
+            lines.append(f"output_tokens: {step2_stats.get('completion_tokens', 0)}")
+            lines.append(f"total_tokens: {step2_stats.get('total_tokens', 0)}")
+            lines.append("")
+
+            lines.append("[Total Stats]")
+            lines.append(f"time_sec: {total_time}")
+            lines.append(f"input_tokens: {total_prompt}")
+            lines.append(f"output_tokens: {total_completion}")
+            lines.append(f"total_tokens: {total_tokens}")
+            lines.append("")
+
+            lines.append("[Analysis Text]")
+            lines.append(analysis_text)
+            lines.append("")
+
+            lines.append("[AABB Collisions]")
+            if collision_results:
+                for name1, name2, volume in collision_results:
+                    lines.append(f"- {name1} vs {name2}: overlap_volume={volume}")
+            else:
+                lines.append("No collisions detected.")
+            lines.append("")
+
+            lines.append("[Room Size]")
+            lines.append(f"area_size_X: {layout_json.get('area_size_X', 'N/A')}")
+            lines.append(f"area_size_Y: {layout_json.get('area_size_Y', 'N/A')}")
+            lines.append("")
+
+            lines.append("[Inputs]")
+            lines.append(f"image_path: {image_path}")
+            lines.append("")
+
+            lines.append("[dimensions.txt]")
+            lines.append(dimensions_text)
+            lines.append("")
+
+            lines.append("[prompt1]")
+            lines.append(prompt1_text)
+            lines.append("")
+
+            lines.append("[prompt2]")
+            lines.append(prompt2_text)
+            lines.append("")
+
+            with open(log_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            
+            omni.log.info(f"Detailed generation log saved to: {log_path}")
+            return log_path
+
+        except Exception as e:
+            omni.log.error(f"Failed to save generation log: {e}")
+            import traceback
+            omni.log.error(traceback.format_exc())
             return None
