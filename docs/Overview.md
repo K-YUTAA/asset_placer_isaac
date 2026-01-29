@@ -1,192 +1,192 @@
 # Overview
 
-USD Search Placer for Isaac Sim - AI駆動の家具配置拡張機能
+USD Search Placer for Isaac Sim - AI-Powered Furniture Placement Extension
 
-## システム概要
+## System Overview
 
-USD Search Placerは、NVIDIA Omniverse Isaac Sim向けの拡張機能で、**2Dの間取り画像と寸法情報を入力として、OpenAI GPTを使用してレイアウトJSONを生成し、USD Search（ベクトル検索）を用いてNucleusサーバーからアセットを自動検索・配置する研究用ツール**です。
+USD Search Placer is an extension for NVIDIA Omniverse Isaac Sim that **generates room layouts from 2D floor plan images and dimension information using OpenAI GPT, and automatically searches and places assets from Nucleus servers using USD Search (vector search)**. This is a research tool designed for experimental workflows.
 
-### 主な目的
+### Primary Purpose
 
-研究用途として「**AI解析 → JSON生成 → 3D配置 → 置換/調整**」の一連の実験が行えることを重視しています。
+The extension focuses on enabling a complete experimental workflow: **"AI Analysis → JSON Generation → 3D Placement → Replacement/Adjustment"** for research purposes.
 
-## システムの動作フロー
+## System Workflow
 
-### 方法1: 画像から生成（AI駆動）
-
-```
-[入力]
-  ↓
-1. フロアプラン画像 + 寸法テキスト + プロンプト
-  ↓
-2. Step1: OpenAI GPTで画像解析
-  ├─ 部屋の構造を理解
-  ├─ 家具の種類と位置を識別
-  └─ 解析結果をテキストで出力（承認ワークフローあり）
-  ↓
-3. Step2: 解析結果からレイアウトJSON生成
-  ├─ 構造化されたJSON形式で出力
-  ├─ 家具の位置、サイズ、回転を定義
-  └─ 座標系の自動変換（Y-Up → Z-Up、cm → m）
-  ↓
-4. Step3: 衝突検出（オプション）
-  ├─ AABB（軸並行境界ボックス）で衝突を検出
-  └─ 問題のある配置を報告
-  ↓
-5. USD Searchでアセット検索
-  ├─ 各家具のobject_nameから検索クエリを生成
-  ├─ Nucleusサーバーでベクトル検索を実行
-  └─ 最適なUSDアセットを選択
-  ↓
-6. USD Stageに配置
-  ├─ USD Referenceとして配置（コピーではない）
-  ├─ 位置、スケール、回転を自動適用
-  ├─ 床・壁・窓を手続き的に生成
-  └─ メタデータを保存
-  ↓
-[出力: 3Dシーン]
-```
-
-### 方法2: JSONファイルから直接配置
+### Method 1: Generate from Image (AI-Driven)
 
 ```
-[入力: 既存のレイアウトJSON]
+[Input]
   ↓
-1. JSONファイルを読み込み
+1. Floor plan image + Dimensions text + Prompts
   ↓
-2. バリデーション（構造チェック）
+2. Step1: Image Analysis with OpenAI GPT
+  ├─ Understand room structure
+  ├─ Identify furniture types and positions
+  └─ Output analysis results as text (with approval workflow)
   ↓
-3. USD Searchでアセット検索
+3. Step2: Generate Layout JSON from Analysis
+  ├─ Output structured JSON format
+  ├─ Define furniture position, size, and rotation
+  └─ Automatic coordinate system conversion (Y-Up → Z-Up, cm → m)
   ↓
-4. USD Stageに配置
+4. Step3: Collision Detection (Optional)
+  ├─ Detect collisions using AABB (Axis-Aligned Bounding Box)
+  └─ Report problematic placements
   ↓
-[出力: 3Dシーン]
+5. Asset Search with USD Search
+  ├─ Generate search queries from object_name for each furniture
+  ├─ Execute vector search on Nucleus server
+  └─ Select optimal USD assets
+  ↓
+6. Placement on USD Stage
+  ├─ Place as USD Reference (not copy)
+  ├─ Automatically apply position, scale, and rotation
+  ├─ Procedurally generate floor, walls, and windows
+  └─ Save metadata
+  ↓
+[Output: 3D Scene]
 ```
 
-## 主要機能
+### Method 2: Direct Placement from JSON File
 
-### 🤖 AI駆動のレイアウト生成
+```
+[Input: Existing Layout JSON]
+  ↓
+1. Load JSON file
+  ↓
+2. Validation (structure check)
+  ↓
+3. Asset Search with USD Search
+  ↓
+4. Placement on USD Stage
+  ↓
+[Output: 3D Scene]
+```
 
-- **Step1: 画像解析**
-  - フロアプラン画像をOpenAI GPTで解析
-  - 部屋の構造と家具の配置を理解
-  - 解析結果をテキストで出力（承認ワークフロー対応）
+## Key Features
 
-- **Step2: JSON生成**
-  - 解析結果から構造化されたレイアウトJSONを生成
-  - 家具の位置（X, Y）、サイズ（Length, Width, Height）、回転（rotationZ）を定義
-  - 座標系の自動変換（Y-Up → Z-Up、cm → m）
+### 🤖 AI-Driven Layout Generation
 
-- **Step3: 衝突検出**
-  - AABB（軸並行境界ボックス）で衝突を検出
-  - 問題のある配置を報告
+- **Step1: Image Analysis**
+  - Analyze floor plan images with OpenAI GPT
+  - Understand room structure and furniture placement
+  - Output analysis results as text (with approval workflow support)
 
-### 🔍 USD Search統合
+- **Step2: JSON Generation**
+  - Generate structured layout JSON from analysis results
+  - Define furniture position (X, Y), size (Length, Width, Height), and rotation (rotationZ)
+  - Automatic coordinate system conversion (Y-Up → Z-Up, cm → m)
 
-- **ベクトル検索**
-  - Nucleusサーバー上のUSDアセットを自然言語クエリで検索
-  - 検索API: `http://192.168.11.65:30080/search`（Basic認証）
+- **Step3: Collision Detection**
+  - Detect collisions using AABB (Axis-Aligned Bounding Box)
+  - Report problematic placements
 
-- **自動配置**
-  - 検索結果から最適なアセットを選択
-  - USD Referenceとして配置（コピーではない）
-  - 位置、スケール、回転を自動適用
+### 🔍 USD Search Integration
 
-- **ブラックリスト機能**
-  - 不要なアセットをブラックリストに登録
-  - 再検索時に除外される
-  - URLと同一性キーで二重管理
+- **Vector Search**
+  - Search USD assets on Nucleus server using natural language queries
+  - Search API: `http://192.168.11.65:30080/search` (Basic authentication)
 
-- **置換機能**
-  - 配置済みアセットを別のアセットに置き換え可能
-  - 「Blacklist & Replace」と「Replace Only」モード
+- **Automatic Placement**
+  - Select optimal assets from search results
+  - Place as USD Reference (not copy)
+  - Automatically apply position, scale, and rotation
 
-### 🏗️ 手続き的生成
+- **Blacklist Functionality**
+  - Register unwanted assets to blacklist
+  - Excluded during re-search
+  - Dual management with URL and identity keys
 
-- **床生成**
-  - 矩形またはポリゴン形状の床を自動生成
-  - `UsdGeom.Cube`または`UsdGeom.Mesh`を使用
+- **Replacement Functionality**
+  - Replace placed assets with different assets
+  - "Blacklist & Replace" and "Replace Only" modes
 
-- **壁生成**
-  - 部屋の外周に沿って壁を自動生成
-  - 開口部（ドア・窓）で壁セグメントを分割
-  - 壁厚: デフォルト0.10m
+### 🏗️ Procedural Generation
 
-- **窓ガラス生成**
-  - 窓開口部に半透明ガラスマテリアルを自動生成
-  - `UsdPreviewSurface`でopacity=0.2, ior=1.5
+- **Floor Generation**
+  - Automatically generate rectangular or polygon-shaped floors
+  - Uses `UsdGeom.Cube` or `UsdGeom.Mesh`
 
-### ⚙️ 高度な設定
+- **Wall Generation**
+  - Automatically generate walls along room perimeter
+  - Split wall segments at openings (doors, windows)
+  - Wall thickness: Default 0.10m
 
-- **AIモデル選択**
-  - Step1/Step2で異なるモデルを選択可能
-  - GPT-4o-mini、GPT-4o、GPT-4o-reasoningなど
+- **Window Glass Generation**
+  - Automatically generate semi-transparent glass material for window openings
+  - Uses `UsdPreviewSurface` with opacity=0.2, ior=1.5
 
-- **推論強度調整**
-  - `low`, `medium`, `high`, `xhigh`から選択
+### ⚙️ Advanced Settings
 
-- **詳細度調整**
-  - テキスト詳細度（`low`, `medium`, `high`）
-  - 画像詳細度（`low`, `high`）
+- **AI Model Selection**
+  - Select different models for Step1/Step2
+  - GPT-4o-mini, GPT-4o, GPT-4o-reasoning, etc.
 
-- **トークン上限**
-  - 出力トークン数の上限を設定（デフォルト: 16000）
+- **Reasoning Effort Adjustment**
+  - Select from `low`, `medium`, `high`, `xhigh`
 
-### 🎯 座標系と変換
+- **Detail Level Adjustment**
+  - Text verbosity (`low`, `medium`, `high`)
+  - Image detail (`low`, `high`)
 
-- **座標系統一**
-  - 右=+X / 左=-Xに統一された座標系
-  - X反転セーフティ機能
+- **Token Limit**
+  - Set maximum output token count (default: 16000)
 
-- **自動変換**
-  - Y-Up座標系からZ-Up座標系への自動変換
-  - cm単位からm単位への自動変換
+### 🎯 Coordinate System and Conversion
 
-- **回転オフセット**
-  - アセットごとの回転オフセットを保存
-  - 同一アセットのPrimを一括更新
+- **Coordinate System Unification**
+  - Unified coordinate system: Right=+X / Left=-X
+  - X-axis inversion safety feature
 
-### 💾 レイアウト自動復元
+- **Automatic Conversion**
+  - Automatic conversion from Y-Up to Z-Up coordinate system
+  - Automatic conversion from cm to m units
 
-- **Quick Layout対応**
-  - 起動時にQuick Layoutを自動ロード
-  - Quick Save/Quick Loadに対応
+- **Rotation Offset**
+  - Save rotation offset per asset
+  - Batch update Prims of the same asset
 
-- **設定の永続化**
-  - APIキー、検索ルートURL、ファイルパスなどを自動保存
-  - `extension_settings.json`に保存
+### 💾 Layout Auto-Restore
 
-## UI構成
+- **Quick Layout Support**
+  - Automatically load Quick Layout on startup
+  - Supports Quick Save/Quick Load
 
-### メインウィンドウ
+- **Settings Persistence**
+  - Automatically save API keys, search root URL, file paths, etc.
+  - Saved to `extension_settings.json`
+
+## UI Structure
+
+### Main Window
 
 **Tab1: Generate from Image**
-- 画像/寸法/プロンプトファイルの選択
-- AI Model選択 + Advanced Settings
-- OpenAI API Key入力
-- Search Root URL設定
-- Search Testerボタン
-- Asset Orientation Offset領域
-- 承認チェックボックス
-- Generate JSON / Preview JSONボタン
-- AI分析結果表示 + Approve/Rejectボタン
+- Select image/dimensions/prompt files
+- AI Model selection + Advanced Settings
+- OpenAI API Key input
+- Search Root URL configuration
+- Search Tester button
+- Asset Orientation Offset area
+- Approval checkbox
+- Generate JSON / Preview JSON buttons
+- AI analysis results display + Approve/Reject buttons
 
 **Tab2: Load from File**
-- JSONファイル選択
+- JSON file selection
 - Search Root URL / Search Tester / Orientation Offset
-- Place Assetsボタン
+- Place Assets button
 
-### サブウィンドウ
+### Sub Windows
 
-- **AI Advanced Settings**: Step1/Step2モデル、推論強度、verbosity、画像detail、max tokens
-- **Selected File Preview**: 画像/寸法/プロンプトのプレビュー
-- **Generated JSON Preview**: 生成されたJSONを読み取り専用表示
-- **Blacklisted Assets**: ブラックリストの閲覧、削除、全消去
-- **USD Search Tester**: クエリ入力、検索結果サムネイル表示、ブラックリスト登録
+- **AI Advanced Settings**: Step1/Step2 models, reasoning effort, verbosity, image detail, max tokens
+- **Selected File Preview**: Preview of image/dimensions/prompts
+- **Generated JSON Preview**: Read-only display of generated JSON
+- **Blacklisted Assets**: View, delete, and clear blacklist
+- **USD Search Tester**: Query input, search result thumbnail display, blacklist registration
 
-## データフロー
+## Data Flow
 
-### JSONスキーマ
+### JSON Schema
 
 ```json
 {
@@ -224,111 +224,111 @@ USD Search Placerは、NVIDIA Omniverse Isaac Sim向けの拡張機能で、**2D
 }
 ```
 
-### 座標系
+### Coordinate System
 
-- **X**: 水平方向（右=+X、左=-X）
-- **Y**: 奥行き方向（画像上方向=+Y）
-- **Z**: 高さ方向（上=+Z）
-- **単位**: メートル（m）
+- **X**: Horizontal direction (Right=+X, Left=-X)
+- **Y**: Depth direction (Image upward direction=+Y)
+- **Z**: Height direction (Up=+Z)
+- **Units**: Meters (m)
 
-## システム構成
+## System Architecture
 
-### ディレクトリ構造
+### Directory Structure
 
 ```
 my.research.asset_placer_isaac/
 ├── config/
-│   └── extension.toml          # 拡張機能マニフェストとエントリーポイント
-├── docs/                       # ドキュメント
+│   └── extension.toml          # Extension manifest and entrypoint
+├── docs/                        # Documentation
 ├── my/research/asset_placer_isaac/
-│   ├── core/                   # コア機能
-│   │   ├── extension_app.py    # IExtエントリーポイント
-│   │   ├── ui.py               # UI構築
-│   │   ├── handlers.py         # UIイベントハンドラ
-│   │   ├── commands.py         # アセット配置コマンド
-│   │   ├── settings.py         # 設定管理
-│   │   ├── state.py            # 状態管理（回転オフセット、ブラックリスト）
-│   │   └── constants.py        # 定数・プロンプト・モデル一覧
-│   ├── backend/                 # バックエンド処理
-│   │   ├── ai_processing.py    # OpenAI処理（Step1/Step2/Step3）
-│   │   └── file_utils.py       # ファイルユーティリティ
-│   ├── procedural/             # 手続き的生成
-│   │   ├── floor_generator.py  # 床生成
-│   │   ├── wall_generator.py   # 壁生成
-│   │   └── door_detector.py   # ドア検出
-│   └── tests/                  # テスト
-└── data/                       # リソース
+│   ├── core/                   # Core functionality
+│   │   ├── extension_app.py    # IExt entrypoint
+│   │   ├── ui.py               # UI construction
+│   │   ├── handlers.py         # UI event handlers
+│   │   ├── commands.py         # Asset placement commands
+│   │   ├── settings.py         # Settings management
+│   │   ├── state.py            # State management (rotation offsets, blacklist)
+│   │   └── constants.py        # Constants, prompts, model lists
+│   ├── backend/                 # Backend processing
+│   │   ├── ai_processing.py    # OpenAI processing (Step1/Step2/Step3)
+│   │   └── file_utils.py       # File utilities
+│   ├── procedural/             # Procedural generation
+│   │   ├── floor_generator.py  # Floor generation
+│   │   ├── wall_generator.py   # Wall generation
+│   │   └── door_detector.py   # Door detection
+│   └── tests/                  # Tests
+└── data/                       # Resources
     ├── icon.png
     └── preview.png
 ```
 
-### エントリーポイント
+### Entry Point
 
-`config/extension.toml`で定義：
+Defined in `config/extension.toml`:
 - `my.research.asset_placer_isaac.core.extension_app`
 
-### 主要モジュール
+### Key Modules
 
-- **`core/extension_app.py`**: 拡張機能のエントリーポイント、UIの初期化
-- **`core/commands.py`**: USD Search、アセット配置、トランスフォーム適用
-- **`backend/ai_processing.py`**: OpenAI APIとの通信、画像解析、JSON生成
-- **`procedural/wall_generator.py`**: 壁と窓ガラスの生成
-- **`procedural/floor_generator.py`**: 床の生成
+- **`core/extension_app.py`**: Extension entry point, UI initialization
+- **`core/commands.py`**: USD Search, asset placement, transform application
+- **`backend/ai_processing.py`**: Communication with OpenAI API, image analysis, JSON generation
+- **`procedural/wall_generator.py`**: Wall and window glass generation
+- **`procedural/floor_generator.py`**: Floor generation
 
-## 技術スタック
+## Technology Stack
 
-### 依存関係
+### Dependencies
 
 - **Omniverse**: `omni.ext`, `omni.ui`, `omni.usd`, `omni.client`, `omni.kit.app`
 - **USD**: `pxr` (Usd, UsdGeom, Sdf, Gf, UsdShade)
 - **AI**: `openai` (AsyncOpenAI)
-- **画像処理**: `opencv-python`, `PIL` (Pillow)
-- **数値計算**: `numpy`
+- **Image Processing**: `opencv-python`, `PIL` (Pillow)
+- **Numerical Computing**: `numpy`
 
-### 外部サービス
+### External Services
 
-- **OpenAI API**: 画像解析とJSON生成
-- **USD Search API**: Nucleusサーバー上のアセット検索
-- **Omniverse Nucleus**: USDアセットのストレージ
+- **OpenAI API**: Image analysis and JSON generation
+- **USD Search API**: Asset search on Nucleus server
+- **Omniverse Nucleus**: USD asset storage
 
-## 設定ファイル
+## Configuration Files
 
 ### `extension_settings.json`
 
-保存項目:
-- `openai_api_key`: OpenAI APIキー
-- `search_root_url`: NucleusサーバーのアセットルートURL
-- `image_path`, `dimensions_path`, `prompt1_path`, `prompt2_path`: ファイルパス
-- `json_output_dir`: JSON出力ディレクトリ
-- `model_index`: デフォルトモデル
-- `ai_step1_model_index`, `ai_step2_model_index`: Step1/Step2のモデル
-- `ai_reasoning_effort_index`, `ai_text_verbosity_index`, `ai_image_detail_index`: AI設定
-- `ai_max_output_tokens`: トークン上限
-- `asset_blacklist`, `asset_blacklist_keys`: ブラックリスト
+Saved items:
+- `openai_api_key`: OpenAI API key
+- `search_root_url`: Nucleus server asset root URL
+- `image_path`, `dimensions_path`, `prompt1_path`, `prompt2_path`: File paths
+- `json_output_dir`: JSON output directory
+- `model_index`: Default model
+- `ai_step1_model_index`, `ai_step2_model_index`: Step1/Step2 models
+- `ai_reasoning_effort_index`, `ai_text_verbosity_index`, `ai_image_detail_index`: AI settings
+- `ai_max_output_tokens`: Token limit
+- `asset_blacklist`, `asset_blacklist_keys`: Blacklist
 
 ### `asset_rotation_offsets.json`
 
-アセットURLごとの回転オフセット（度）を保存。
+Saves rotation offset (degrees) per asset URL.
 
-## 最新の機能追加（2026-01-20）
+## Latest Feature Additions (2026-01-20)
 
-### ✅ 安定性の向上
-- 窓ガラスマテリアル接続エラー修正
-- エラーハンドリング強化
+### ✅ Stability Improvements
+- Fixed window glass material connection errors
+- Enhanced error handling
 
-### ✅ 座標系の整合
-- 左右座標系の統一（右=+X / 左=-X）
-- X反転セーフティ機能
+### ✅ Coordinate System Alignment
+- Unified coordinate system (Right=+X / Left=-X)
+- X-axis inversion safety feature
 
-### ✅ 機能改善
-- 窓の自動生成抑止
-- レイアウト自動復元機能
+### ✅ Feature Enhancements
+- Suppressed automatic window generation
+- Layout auto-restore functionality
 
-## 関連ドキュメント
+## Related Documentation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - システム設計とワークフロー
-- [API_REFERENCE.md](API_REFERENCE.md) - API仕様
-- [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) - 詳細設計書
-- [SETUP.md](SETUP.md) - セットアップガイド
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - トラブルシューティング
-- [KNOWN_ISSUES.md](KNOWN_ISSUES.md) - 既知の問題
+- [ARCHITECTURE.md](ARCHITECTURE.md) - System design and workflow
+- [API_REFERENCE.md](API_REFERENCE.md) - API specifications
+- [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) - Detailed design document
+- [SETUP.md](SETUP.md) - Setup guide
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Troubleshooting
+- [KNOWN_ISSUES.md](KNOWN_ISSUES.md) - Known issues
