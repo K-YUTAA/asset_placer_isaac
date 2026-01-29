@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Entry point now loads `core.extension_app` via `config/extension.toml`
 - Documentation refreshed to match the new structure
 
+## [2026-01-29]
+
+### Added
+- **Restoration of Generation Logs**: Re-implemented timestamped log files (`.log`) in the project root's `log/` folder.
+  - Logs now include AI settings, token usage statistics, full step 1/2 texts, and AABB collision results.
+- **Rotation Accuracy Improvements**: Enhanced `prompt_1.txt` and `prompt_2.txt` with unified rotation definitions and 'functional front' rules for various furniture categories.
+
+### Fixed
+- **UI Button State**: Fixed a bug where the "Generate JSON (AI)" button remained disabled after a single use or cancellation.
+- **Token Usage Display**: Improved real-time token tracking in streaming mode to ensure accurate usage stats are displayed in the UI.
+- **Import Error**: Fixed a `NameError` for `Any` and missing `traceback` import in `commands.py` that caused extension load failure.
+
 ## [2026-01-24]
 
 ### Added
