@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+#
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+[package]
+title = "USD Search Placer for Isaac Sim"
+version = "0.1.0"  # Semantic Versioning is used: https://semver.org/
+description = "Asset placement extension for Isaac Sim with procedural generation capabilities."
+category = "Example"  # How to categorize this in the Extension Manager
+changelog = "docs/CHANGELOG.md"
+icon = "data/icon.png"  # Icon to show in the Extension Manager
+keywords = ["kit", "example", "extension", "isaac", "sim"]  # Search keywords for the Extension Manager
+preview_image = "data/preview.png"  # Preview to show in the Extension Manager
+readme  = "docs/README.md"  # Path (relative to the root) or content of readme markdown file for UI
+repository = "https://github.com/K-YUTAA/asset_placer_isaac.git"  # URL of the extension source repository
+
+
+[dependencies]
+"omni.client" = {}
+"omni.kit.search.service" = {}
+"omni.usd" = {}
+
+[settings]
+
+
+[[python.module]]  # Main python module this extension provides
+name = "my.research.asset_placer_isaac.core.extension_app"
+
+
+[documentation]
+pages = [
+    "docs/Overview.md",
+    "docs/CHANGELOG.md",
+]
+
+
+[[test]]
+dependencies = [
+]
+
+args = [
+]
+
+
+[python.pipapi]
+packages = [
+    "opencv-python==4.10.0.84",
+    "openai",
+    "pillow",
+    "numpy>=1.21.2"
+]
+use_online_index = true

@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+_venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Extension settings (contains API keys)
+my/research/asset_placer_isaac/extension_settings.json
+.claude/settings.local.json
+
+# Generated files
+*.log
+*.json.bak
+*.usd.bak
+
+# Test outputs
+test_outputs/
+*.usd
+*.usda
+*.usdz
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+
+# Asset rotation offsets (user-specific)
+my/research/asset_placer_isaac/asset_rotation_offsets.json
+
+# Build artifacts
+_build/
+*.pyc

@@ -1,0 +1,23 @@
+{
+    "openai_api_key": "YOUR_OPENAI_API_KEY_HERE",
+    "search_root_url": "omniverse://your-server/path/to/assets/",
+    "image_path": "",
+    "dimensions_path": "",
+    "prompt1_path": "",
+    "prompt2_path": "",
+    "json_output_dir": "",
+    "model_index": 2,
+    "ai_step1_model_index": 0,
+    "ai_step2_model_index": 0,
+    "ai_reasoning_effort_index": 0,
+    "ai_text_verbosity_index": 0,
+    "ai_image_detail_index": 0,
+    "ai_max_output_tokens": 16000,
+    "ai_max_retries": 1,
+    "ai_retry_delay_sec": 1.0,
+    "auto_layout_enabled": true,
+    "auto_layout_mode": "quick",
+    "auto_layout_file": "",
+    "asset_blacklist": [],
+    "asset_blacklist_keys": []
+}
