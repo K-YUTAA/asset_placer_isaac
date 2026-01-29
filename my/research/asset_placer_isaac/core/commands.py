@@ -245,7 +245,10 @@ class CommandsMixin:
                 return
 
             # --- ▼ UIに結果を反映 ▼ ---
-            self._analysis_text_model.as_string = f"Step 1 (Analysis) Complete:\n\n{analysis_text}"
+            step1_stats_text = f"\\n\\n━━━ Step 1 Stats ━━━\\n⏱ Time: {step1_stats['time']:.2f}s | 📥 Prompt: {step1_stats['prompt_tokens']:,} | 📤 Completion: {step1_stats['completion_tokens']:,} | 📊 Total: {step1_stats['total_tokens']:,}"
+            self._analysis_text_model.as_string = f"Step 1 (Analysis) Complete:{step1_stats_text}\\n\\n{analysis_text}"
+            self._set_ai_tokens(step1_stats, None)
+            self._set_ai_status("AI Status: Step 1 (Analysis) Complete")
             omni.log.info(f"Analysis completed in {step1_stats['time']:.2f}s")
             omni.log.info(f"Analysis result:\n{analysis_text}")
 
@@ -297,6 +300,8 @@ class CommandsMixin:
                 return
 
             self._analysis_text_model.as_string += "\nJSON Generation Complete."
+            self._set_ai_tokens(step1_stats, step2_stats)
+            self._set_ai_status("AI Status: Step 2 (JSON Generation) Complete")
             omni.log.info(f"JSON generation completed in {step2_stats['time']:.2f}s")
 
             # JSONをファイルに保存
@@ -337,6 +342,8 @@ class CommandsMixin:
 
             # --- 4. ステップ3: 衝突検出 ---
             omni.log.info("=== Step 3: Checking collisions ===")
+            total_stats_text = f"\\n\\n━━━ Total Stats (Step 1 + Step 2) ━━━\\n⏱ Time: {total_time:.2f}s | 📥 Prompt: {total_prompt_tokens:,} | 📤 Completion: {total_completion_tokens:,} | 📊 Total: {total_tokens:,}"
+            self._analysis_text_model.as_string += total_stats_text
             self._analysis_text_model.as_string += "\n\nChecking collisions..."
             be.step3_check_collisions(layout_json)
 
@@ -358,7 +365,8 @@ class CommandsMixin:
             omni.log.error(f"AI Generation failed: {e}")
             self._analysis_text_model.as_string = f"Error: {e}"
         finally:
-            self._search_task = None
+            self._set_ai_busy(False)
+            self._ai_task = None
 
     async def _do_step2_and_placement(self):
         """Step 2（JSON生成）以降を実行"""
@@ -398,6 +406,8 @@ class CommandsMixin:
                 return
 
             self._analysis_text_model.as_string += "\nJSON Generation Complete."
+            self._set_ai_tokens(self._analysis_result["step1_stats"], step2_stats)
+            self._set_ai_status("AI Status: Step 2 (JSON Generation) Complete")
             omni.log.info(f"JSON generation completed in {step2_stats['time']:.2f}s")
 
             # JSONをファイルに保存
@@ -438,6 +448,8 @@ class CommandsMixin:
 
             # --- ステップ3: 衝突検出 ---
             omni.log.info("=== Step 3: Checking collisions ===")
+            total_stats_text = f"\\n\\n━━━ Total Stats (Step 1 + Step 2) ━━━\\n⏱ Time: {total_time:.2f}s | 📥 Prompt: {total_prompt_tokens:,} | 📤 Completion: {total_completion_tokens:,} | 📊 Total: {total_tokens:,}"
+            self._analysis_text_model.as_string += total_stats_text
             self._analysis_text_model.as_string += "\n\nChecking collisions..."
             be.step3_check_collisions(layout_json)
 
@@ -459,7 +471,8 @@ class CommandsMixin:
             omni.log.error(f"Step 2-5 failed: {e}")
             self._analysis_text_model.as_string += f"\nError: {e}"
         finally:
-            self._search_task = None
+            self._set_ai_busy(False)
+            self._ai_task = None
 
     # --- フェーズ4 (共通の開始点) ---
     def _start_asset_search(self, layout_data: dict):

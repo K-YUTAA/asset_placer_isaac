@@ -19,6 +19,11 @@ import time
 from typing import Dict, Any, List, Tuple, Optional
 
 import omni.log
+import httpx
+
+# タイムアウト設定: Reasoning モデルは長時間かかるため20分に設定
+# デフォルトの10分ではタイムアウトしてリトライが発生する
+DEFAULT_API_TIMEOUT = 1200.0  # 20分
 
 DEFAULT_REASONING_EFFORT = "high"
 DEFAULT_TEXT_VERBOSITY = "high"
@@ -149,6 +154,105 @@ def _is_response_truncated(finish_reason: Optional[str]) -> bool:
     return finish_reason in ("length", "incomplete")
 
 
+async def _stream_response_with_logging(stream, step_name: str) -> Tuple[str, Any]:
+    """
+    ストリーミングレスポンスを処理し、進捗をリアルタイムでログ出力する。
+
+    Args:
+        stream: OpenAI streaming response object
+        step_name: ログに表示するステップ名 (例: "Step 1", "Step 2")
+
+    Returns:
+        (output_text, final_response): 生成されたテキストと最終レスポンスオブジェクト
+    """
+    output_text = ""
+    reasoning_summary = ""
+    final_response = None
+    last_log_len = 0
+    log_interval = 100  # 100文字ごとにログ出力
+
+    omni.log.info(f"[{step_name}] 🚀 Streaming started...")
+
+    async for event in stream:
+        event_type = getattr(event, "type", None)
+
+        # 全てのイベントに対して、もし usage が含まれていれば取得を試みる
+        # (ストリーミングAPIでは時折、途中のイベントや複数のイベントに usage が分散・上書きされることがあるため)
+        if hasattr(event, "response") and event.response:
+            event_usage = getattr(event.response, "usage", None)
+            if event_usage:
+                if final_response is None:
+                    final_response = event.response
+                else:
+                    # usage が更新されている場合は反映
+                    final_response.usage = event_usage
+
+        if event_type == "response.output_text.delta":
+            # テキスト生成の進捗
+            delta = getattr(event, "delta", "")
+            output_text += delta
+            # 一定間隔でログ出力
+            if len(output_text) - last_log_len >= log_interval:
+                omni.log.info(f"[{step_name}] 📝 Generating... ({len(output_text):,} chars)")
+                last_log_len = len(output_text)
+
+        elif event_type == "response.reasoning_summary_text.delta":
+            # 推論サマリ（reasoningモデル用）
+            delta = getattr(event, "delta", "")
+            reasoning_summary += delta
+            # 推論サマリはリアルタイムで表示（最初の100文字）
+            if len(reasoning_summary) <= 100:
+                omni.log.info(f"[{step_name}] 🧠 Reasoning: {delta}")
+
+        elif event_type == "response.function_call_arguments.delta":
+            # ツール/関数呼び出しの進行
+            omni.log.info(f"[{step_name}] 🔧 Tool call arguments streaming...")
+
+        elif event_type == "response.output_item.added":
+            # 新しい出力項目が追加された
+            item = getattr(event, "item", None)
+            item_type = getattr(item, "type", None) if item else None
+            if item_type:
+                omni.log.info(f"[{step_name}] 📦 Output item added: {item_type}")
+
+        elif event_type == "response.in_progress":
+            omni.log.info(f"[{step_name}] ⏳ Response in progress...")
+
+        elif event_type in ("response.completed", "response.done"):
+            # 生成完了 - response オブジェクトを取得
+            event_resp = getattr(event, "response", None)
+            if event_resp:
+                final_response = event_resp
+            
+            omni.log.info(f"[{step_name}] ✅ Generation complete ({len(output_text):,} chars)")
+
+            # usage情報をログ出力（デバッグ用）
+            if final_response:
+                usage = getattr(final_response, "usage", None)
+                if usage:
+                    omni.log.info(f"[{step_name}] 📊 Usage data captured: {usage}")
+                else:
+                    omni.log.warn(f"[{step_name}] ⚠️ usage data is still None at completion")
+            else:
+                omni.log.warn(f"[{step_name}] ⚠️ final_response is still None at completion")
+
+            # 最終的な推論サマリがある場合は表示
+            if reasoning_summary:
+                summary_preview = reasoning_summary[:200] + "..." if len(reasoning_summary) > 200 else reasoning_summary
+                omni.log.info(f"[{step_name}] 🧠 Reasoning summary: {summary_preview}")
+
+    # 万が一 final_response が None の場合、usage ゼロのモックを作成して返す
+    if final_response is None:
+        omni.log.warn(f"[{step_name}] ⚠️ Creating mock response as final_response was None")
+        class MockResponse:
+            def __init__(self):
+                self.usage = None
+                self.model = "unknown"
+        final_response = MockResponse()
+
+    return output_text, final_response
+
+
 def _extract_json_from_text(text: str) -> Dict[str, Any]:
     try:
         return json.loads(text)
@@ -213,10 +317,10 @@ async def step1_analyze_image(
     from openai import AsyncOpenAI
 
     try:
-        client = AsyncOpenAI(api_key=api_key) if api_key else AsyncOpenAI()
+        client = AsyncOpenAI(api_key=api_key, timeout=DEFAULT_API_TIMEOUT) if api_key else AsyncOpenAI(timeout=DEFAULT_API_TIMEOUT)
     except Exception as e:
-        omni.log.error(f"OpenAI API?????????????? {e}")
-        raise RuntimeError("OpenAI client????????????API????????????")
+        omni.log.error(f"OpenAI APIクライアントの初期化に失敗: {e}")
+        raise RuntimeError("OpenAI clientの初期化に失敗。APIキーを確認してください")
 
     omni.log.info(f"--- ????1: ??????????? (???: {model_name}) ---")
 
@@ -264,14 +368,16 @@ async def step1_analyze_image(
 
             if hasattr(client, "responses"):
                 try:
-                    response = await client.responses.create(
+                    # ストリーミングモードでAPIを呼び出し、リアルタイムでログ出力
+                    stream = await client.responses.create(
                         model=model_name,
                         input=responses_input,
-                        reasoning={"effort": effective_reasoning_effort},
+                        reasoning={"effort": effective_reasoning_effort, "summary": "auto"},
                         text={"verbosity": effective_text_verbosity},
                         max_output_tokens=effective_max_output_tokens,
+                        stream=True,
                     )
-                    response_text = _extract_response_text(response)
+                    response_text, response = await _stream_response_with_logging(stream, "Step 1")
 
                     # Responses API が成功したが output_text が空の場合をチェック
                     if response and not response_text:
@@ -395,10 +501,10 @@ async def step2_generate_json(
     from openai import AsyncOpenAI
 
     try:
-        client = AsyncOpenAI(api_key=api_key) if api_key else AsyncOpenAI()
+        client = AsyncOpenAI(api_key=api_key, timeout=DEFAULT_API_TIMEOUT) if api_key else AsyncOpenAI(timeout=DEFAULT_API_TIMEOUT)
     except Exception as e:
-        omni.log.error(f"OpenAI API?????????????? {e}")
-        raise RuntimeError("OpenAI client????????????API????????????")
+        omni.log.error(f"OpenAI APIクライアントの初期化に失敗: {e}")
+        raise RuntimeError("OpenAI clientの初期化に失敗。APIキーを確認してください")
 
     omni.log.info(f"--- ????2: JSON????????? (???: {model_name}) ---")
 
@@ -445,14 +551,16 @@ The following is a detailed analysis of the furniture layout from the image. Use
 
             if hasattr(client, "responses"):
                 try:
-                    response = await client.responses.create(
+                    # ストリーミングモードでAPIを呼び出し、リアルタイムでログ出力
+                    stream = await client.responses.create(
                         model=model_name,
                         input=responses_input,
-                        reasoning={"effort": effective_reasoning_effort},
+                        reasoning={"effort": effective_reasoning_effort, "summary": "auto"},
                         text={"verbosity": effective_text_verbosity},
                         max_output_tokens=effective_max_output_tokens,
+                        stream=True,
                     )
-                    response_text = _extract_response_text(response)
+                    response_text, response = await _stream_response_with_logging(stream, "Step 2")
 
                     # Responses API が成功したが output_text が空の場合をチェック
                     if response and not response_text:
