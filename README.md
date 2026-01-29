@@ -57,28 +57,108 @@ USD Search Placerは、NVIDIA Omniverse Isaac Sim向けの拡張機能で、2D�
 
 ## セットアップ
 
-### 1. 設定ファイルの準備
+### Isaac Simへの拡張機能の導入
 
-```bash
-cp my/research/asset_placer_isaac/extension_settings.json.example my/research/asset_placer_isaac/extension_settings.json
-cp .claude/settings.local.json.example .claude/settings.local.json
-```
+#### 方法1: Isaac Simリポジトリ内に配置（推奨）
 
-### 2. 設定の編集
+1. **Isaac Simリポジトリをクローンまたは開く**
+   ```bash
+   git clone <isaac-sim-repo-url> isaacsim
+   cd isaacsim
+   ```
 
-`extension_settings.json`を編集して以下を設定：
-- `openai_api_key`: OpenAI APIキー
-- `search_root_url`: Omniverse NucleusサーバーのアセットルートURL（`omniverse://`で開始）
+2. **拡張機能を配置**
+   ```bash
+   # このリポジトリをクローンまたはダウンロード
+   git clone https://github.com/K-YUTAA/asset_placer_isaac.git source/extensions/my.research.asset_placer_isaac
+   ```
 
-**重要**: `extension_settings.json`や`.claude/settings.local.json`に実際のAPIキーをコミットしないでください！
+3. **Isaac Simをビルド**
+   ```powershell
+   # Windows
+   .\repo.bat build
+   ```
+   ```bash
+   # Linux
+   ./repo.sh build
+   ```
 
-### 3. 依存関係のインストール
+4. **Isaac Simを起動**
+   ```powershell
+   # Windows
+   .\repo.bat launch
+   ```
+   ```bash
+   # Linux
+   ./repo.sh launch
+   ```
 
-拡張機能は以下のPythonパッケージを使用します（`config/extension.toml`で自動インストール）：
+5. **拡張機能を有効化**
+   - Isaac Sim起動後、メニューから **Window > Extensions** を開く
+   - 検索ボックスに「USD Search Placer」と入力
+   - 拡張機能を有効化（チェックボックスをON）
+
+#### 方法2: ユーザー拡張機能ディレクトリに配置
+
+1. **ユーザー拡張機能ディレクトリを確認**
+   - Windows: `%LOCALAPPDATA%\ov\kit\exts\`
+   - Linux: `~/.local/share/ov/kit/exts/`
+
+2. **拡張機能をコピー**
+   ```bash
+   # このリポジトリをクローン
+   git clone https://github.com/K-YUTAA/asset_placer_isaac.git
+   
+   # ユーザー拡張機能ディレクトリにコピー
+   cp -r asset_placer_isaac <user-extensions-dir>/my.research.asset_placer_isaac
+   ```
+
+3. **Isaac Simを起動**
+   - 拡張機能は自動的に検出されます
+   - **Window > Extensions** から有効化
+
+### 設定ファイルの準備
+
+1. **設定ファイルのコピー**
+   ```bash
+   cp my/research/asset_placer_isaac/extension_settings.json.example my/research/asset_placer_isaac/extension_settings.json
+   ```
+
+2. **設定の編集**
+
+   `extension_settings.json`を編集して以下を設定：
+   - `openai_api_key`: OpenAI APIキー（環境変数`OPENAI_API_KEY`でも設定可能）
+   - `search_root_url`: Omniverse NucleusサーバーのアセットルートURL（`omniverse://`で開始）
+
+   **重要**: `extension_settings.json`に実際のAPIキーをコミットしないでください！
+
+### 依存関係のインストール
+
+拡張機能は以下のPythonパッケージを使用します（`config/extension.toml`で自動インストールされます）：
+
 - `opencv-python==4.10.0.84`
 - `openai`
 - `pillow`
 - `numpy>=1.21.2`
+
+自動インストールが失敗する場合は、手動でインストール：
+
+```powershell
+# Windows
+.\_build\windows-x86_64\release\kit\python.bat -m pip install openai numpy pillow opencv-python==4.10.0.84
+```
+
+```bash
+# Linux
+./_build/linux-x86_64/release/kit/python.sh -m pip install openai numpy pillow opencv-python==4.10.0.84
+```
+
+### 前提条件
+
+- **Isaac Sim / Kit SDK**: リポジトリがチェックアウトされていること
+- **NVIDIA GPU**: ドライバーバージョン537.70以上
+- **Nucleus Server**: 稼働中でアクセス可能であること
+- **OpenAI API Key**: 利用可能であること（環境変数または設定ファイル）
 
 ## 使用方法
 
