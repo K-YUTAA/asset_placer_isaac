@@ -24,6 +24,7 @@ my/research/asset_placer_isaac/extension_settings.json
 # Claude settings
 .claude/
 **/.claude/
+CLAUDE.md
 
 # Generated files
 *.log
