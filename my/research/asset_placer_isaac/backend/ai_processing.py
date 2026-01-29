@@ -22,7 +22,7 @@ import omni.log
 
 DEFAULT_REASONING_EFFORT = "high"
 DEFAULT_TEXT_VERBOSITY = "high"
-DEFAULT_MAX_OUTPUT_TOKENS = 16000
+DEFAULT_MAX_OUTPUT_TOKENS = 32000
 DEFAULT_IMAGE_DETAIL = "high"
 
 
@@ -115,6 +115,38 @@ def _extract_response_text(response: Any) -> str:
         return getattr(message, "content", "") or ""
 
     return ""
+
+
+def _get_finish_reason(response: Any) -> Optional[str]:
+    """
+    レスポンスから finish_reason または status を取得する。
+
+    Responses API は 'status' フィールド (completed/incomplete) を使用し、
+    Chat Completions API は 'choices[0].finish_reason' (stop/length) を使用する。
+    """
+    # Responses API: status フィールドをチェック
+    status = getattr(response, "status", None)
+    if status:
+        return status
+
+    # Chat Completions API: choices[0].finish_reason をチェック
+    choices = getattr(response, "choices", None)
+    if choices and len(choices) > 0:
+        return getattr(choices[0], "finish_reason", None)
+
+    return None
+
+
+def _is_response_truncated(finish_reason: Optional[str]) -> bool:
+    """
+    finish_reason/status がトランケーションを示すかどうかを判定する。
+
+    - 'length': Chat Completions API でトークン制限に達した
+    - 'incomplete': Responses API で出力が不完全
+    """
+    if finish_reason is None:
+        return False
+    return finish_reason in ("length", "incomplete")
 
 
 def _extract_json_from_text(text: str) -> Dict[str, Any]:
@@ -240,6 +272,23 @@ async def step1_analyze_image(
                         max_output_tokens=effective_max_output_tokens,
                     )
                     response_text = _extract_response_text(response)
+
+                    # Responses API が成功したが output_text が空の場合をチェック
+                    if response and not response_text:
+                        finish_reason = _get_finish_reason(response)
+                        if _is_response_truncated(finish_reason):
+                            reasoning_tokens = _get_reasoning_tokens(getattr(response, "usage", None))
+                            omni.log.error(
+                                f"Responses API returned empty output due to truncation. "
+                                f"finish_reason={finish_reason}, reasoning_tokens={reasoning_tokens}. "
+                                f"Increase max_output_tokens (current: {effective_max_output_tokens})."
+                            )
+                            raise RuntimeError(
+                                f"Reasoning exhausted token limit before generating output. "
+                                f"finish_reason={finish_reason}. Increase max_output_tokens."
+                            )
+                except RuntimeError:
+                    raise
                 except Exception as e:
                     omni.log.warn(f"Responses API failed, falling back to chat.completions: {e}")
                     response = None
@@ -253,6 +302,15 @@ async def step1_analyze_image(
                     reasoning_effort=effective_reasoning_effort,
                 )
                 response_text = _extract_response_text(response)
+
+            # finish_reason をログに記録
+            finish_reason = _get_finish_reason(response)
+            omni.log.info(f"finish_reason={finish_reason}")
+            if _is_response_truncated(finish_reason):
+                omni.log.warn(
+                    f"Response was truncated (finish_reason={finish_reason}). "
+                    f"Output may be incomplete. Consider increasing max_output_tokens."
+                )
 
             end_time = time.time()
             _log_response_details(response)
@@ -395,6 +453,25 @@ The following is a detailed analysis of the furniture layout from the image. Use
                         max_output_tokens=effective_max_output_tokens,
                     )
                     response_text = _extract_response_text(response)
+
+                    # Responses API が成功したが output_text が空の場合をチェック
+                    if response and not response_text:
+                        finish_reason = _get_finish_reason(response)
+                        if _is_response_truncated(finish_reason):
+                            # トランケーションを検出: 二重課金を防ぐため、フォールバックせずエラー
+                            reasoning_tokens = _get_reasoning_tokens(getattr(response, "usage", None))
+                            omni.log.error(
+                                f"Responses API returned empty output due to truncation. "
+                                f"finish_reason={finish_reason}, reasoning_tokens={reasoning_tokens}. "
+                                f"Increase max_output_tokens (current: {effective_max_output_tokens})."
+                            )
+                            raise RuntimeError(
+                                f"Reasoning exhausted token limit before generating output. "
+                                f"finish_reason={finish_reason}. Increase max_output_tokens."
+                            )
+                except RuntimeError:
+                    # トランケーションエラーは再スローする（フォールバックしない）
+                    raise
                 except Exception as e:
                     omni.log.warn(f"Responses API failed, falling back to chat.completions: {e}")
                     response = None
@@ -423,6 +500,15 @@ The following is a detailed analysis of the furniture layout from the image. Use
                     reasoning_effort=effective_reasoning_effort,
                 )
                 response_text = _extract_response_text(response)
+
+            # finish_reason をログに記録
+            finish_reason = _get_finish_reason(response)
+            omni.log.info(f"finish_reason={finish_reason}")
+            if _is_response_truncated(finish_reason):
+                omni.log.warn(
+                    f"Response was truncated (finish_reason={finish_reason}). "
+                    f"Output may be incomplete. Consider increasing max_output_tokens."
+                )
 
             end_time = time.time()
             _log_response_details(response)
