@@ -572,229 +572,337 @@ class CommandsMixin:
 
         return []
 
-    async def _search_and_place_assets(self, layout_data) -> None:
-        """USD Search を用いてアセット検索と配置を行う非同期タスク。"""
+    
+    def _place_debug_bboxes(
+        self,
+        layout_data: Dict[str, object],
+        root_name: str = "DebugBBoxes",
+        clear_existing: bool = True,
+    ) -> None:
+        """JSON?????????????????(BBox)??????"""
+        if not layout_data:
+            omni.log.warn("No layout data provided for debug bboxes.")
+            return
+
+        stage = omni.usd.get_context().get_stage()
+        if stage is None:
+            omni.log.error("No USD stage is available. Open or create a stage first.")
+            return
+
+        # ????????
+        root_token = self._sanitize_identifier(root_name)
+        root_path = f"/{root_token}"
+        if clear_existing:
+            existing = stage.GetPrimAtPath(root_path)
+            if existing and existing.IsValid():
+                stage.RemovePrim(root_path)
+
+        UsdGeom.Xform.Define(stage, Sdf.Path(root_path))
+
+        objects = self._extract_layout_objects(layout_data)
+        if not objects:
+            omni.log.warn("Layout data does not contain placeable objects for debug bboxes.")
+            return
+
+        # ?????????????
+        category_colors = {
+            "bed": Gf.Vec3f(0.7, 0.5, 0.9),
+            "sofa": Gf.Vec3f(0.5, 0.7, 0.9),
+            "table": Gf.Vec3f(0.8, 0.7, 0.4),
+            "chair": Gf.Vec3f(0.6, 0.8, 0.6),
+            "door": Gf.Vec3f(0.9, 0.6, 0.4),
+            "window": Gf.Vec3f(0.4, 0.8, 0.9),
+            "wall": Gf.Vec3f(0.7, 0.7, 0.7),
+            "floor": Gf.Vec3f(0.5, 0.5, 0.5),
+        }
+
         placed = 0
         skipped = 0
+        for index, obj in enumerate(objects, start=1):
+            name = str(obj.get("object_name", "") or obj.get("name", "") or f"item_{index}")
+            category = str(obj.get("category", "") or "").strip().lower()
 
-        try:
-            search_root = self._search_root_model.as_string if self._search_root_model else ""
-            search_root = search_root.strip()
-            if not search_root:
-                omni.log.error("Search root URL is empty. Set the 'Search Root URL' field before running placement.")
-                return
+            length = self._extract_float(obj, "Length", 0.0)
+            width = self._extract_float(obj, "Width", 0.0)
+            height = self._extract_float(obj, "Height", 0.0)
 
-            if not search_root.startswith("omniverse://"):
-                omni.log.error(f"Search root must start with 'omniverse://'. Current value: {search_root}")
-                return
-
-            normalized_root = search_root if search_root.endswith("/") else f"{search_root}/"
-
-            stage = omni.usd.get_context().get_stage()
-            if stage is None:
-                omni.log.error("No USD stage is available. Open or create a stage before placing assets.")
-                return
-
-            area_name = layout_data.get("area_name") if isinstance(layout_data, dict) else None
-            root_prim_path = self._get_or_create_root_prim(stage, area_name)
-
-            objects = self._extract_layout_objects(layout_data)
-            if not objects:
+            if length <= 0.0 or width <= 0.0 or height <= 0.0:
                 omni.log.warn(
-                    "Layout data does not contain placeable objects. Expected keys such as "
-                    "'area_objects_list', 'objects', or a top-level list of entries."
+                    f"[DebugBBox] Skipping '{name}': invalid size (L={length}, W={width}, H={height})"
                 )
-                return
-            omni.log.info(f"Found {len(objects)} candidate objects for placement.")
+                skipped += 1
+                continue
 
-            # ドアのリストを収集（壁の切り抜き用）
-            door_objects = []
+            x = self._extract_float(obj, "X", 0.0)
+            y = self._extract_float(obj, "Y", 0.0)
+            z = self._extract_float(obj, "Z", 0.0)
 
-            for index, obj in enumerate(objects):
-                name = str(obj.get("object_name", "") or "").strip()
-                category = str(obj.get("category", "") or "").strip()
-                category_lower = category.lower()
-                search_prompt = str(obj.get("search_prompt", "") or "").strip()
+            rotation = self._extract_optional_float_by_keys(
+                obj,
+                [
+                    "rotationZ",
+                    "RotationZ",
+                    "rotation_z",
+                    "Rotation_Z",
+                    "rotationY",
+                    "RotationY",
+                    "rotation_y",
+                    "Rotation_Y",
+                    "rotation",
+                    "Rotation",
+                ],
+            )
+            rotation = rotation if rotation is not None else 0.0
 
-                if not (name or category or search_prompt):
-                    omni.log.warn(f"Skipping object #{index + 1}: missing 'object_name', 'category', and 'search_prompt'.")
-                    skipped += 1
-                    continue
+            token = self._sanitize_identifier(name)
+            prim_path = self._get_unique_child_path(stage, root_path, token)
+            cube = UsdGeom.Cube.Define(stage, prim_path)
+            cube.CreateSizeAttr(1.0)
 
-                # 床の場合は手続き的に生成
-                if name.lower() == "floor" or category_lower == "floor":
-                    omni.log.info(f"[Procedural] Generating floor ({index + 1}/{len(objects)})")
-                    floor_path = self._create_procedural_floor(stage, root_prim_path, obj)
-                    if floor_path:
-                        omni.log.info(f"Generated floor at {floor_path}")
+            # ???
+            color = category_colors.get(category, Gf.Vec3f(0.8, 0.8, 0.8))
+            gprim = UsdGeom.Gprim(cube.GetPrim())
+            gprim.CreateDisplayColorAttr([color])
+
+            # ????????
+            xformable = UsdGeom.Xformable(cube.GetPrim())
+            translate_op = xformable.AddTranslateOp()
+            rotate_op = xformable.AddRotateXYZOp()
+            scale_op = xformable.AddScaleOp()
+
+            translate_op.Set(Gf.Vec3f(x, y, z + height * 0.5))
+            rotate_op.Set(Gf.Vec3f(0.0, 0.0, rotation))
+            scale_op.Set(Gf.Vec3f(length, width, height))
+
+            placed += 1
+
+        omni.log.info(
+            f"[DebugBBox] Placed {placed} boxes under '{root_path}'. Skipped={skipped}."
+        )
+
+    async def _search_and_place_assets(self, layout_data) -> None:
+            """USD Search を用いてアセット検索と配置を行う非同期タスク。"""
+            placed = 0
+            skipped = 0
+    
+            try:
+                search_root = self._search_root_model.as_string if self._search_root_model else ""
+                search_root = search_root.strip()
+                if not search_root:
+                    omni.log.error("Search root URL is empty. Set the 'Search Root URL' field before running placement.")
+                    return
+    
+                if not search_root.startswith("omniverse://"):
+                    omni.log.error(f"Search root must start with 'omniverse://'. Current value: {search_root}")
+                    return
+    
+                normalized_root = search_root if search_root.endswith("/") else f"{search_root}/"
+    
+                stage = omni.usd.get_context().get_stage()
+                if stage is None:
+                    omni.log.error("No USD stage is available. Open or create a stage before placing assets.")
+                    return
+    
+                area_name = layout_data.get("area_name") if isinstance(layout_data, dict) else None
+                root_prim_path = self._get_or_create_root_prim(stage, area_name)
+    
+                objects = self._extract_layout_objects(layout_data)
+                if not objects:
+                    omni.log.warn(
+                        "Layout data does not contain placeable objects. Expected keys such as "
+                        "'area_objects_list', 'objects', or a top-level list of entries."
+                    )
+                    return
+                omni.log.info(f"Found {len(objects)} candidate objects for placement.")
+    
+                # ドアのリストを収集（壁の切り抜き用）
+                door_objects = []
+    
+                for index, obj in enumerate(objects):
+                    name = str(obj.get("object_name", "") or "").strip()
+                    category = str(obj.get("category", "") or "").strip()
+                    category_lower = category.lower()
+                    search_prompt = str(obj.get("search_prompt", "") or "").strip()
+    
+                    if not (name or category or search_prompt):
+                        omni.log.warn(f"Skipping object #{index + 1}: missing 'object_name', 'category', and 'search_prompt'.")
+                        skipped += 1
+                        continue
+    
+                    # 床の場合は手続き的に生成
+                    if name.lower() == "floor" or category_lower == "floor":
+                        omni.log.info(f"[Procedural] Generating floor ({index + 1}/{len(objects)})")
+                        floor_path = self._create_procedural_floor(stage, root_prim_path, obj)
+                        if floor_path:
+                            omni.log.info(f"Generated floor at {floor_path}")
+                            placed += 1
+                        else:
+                            skipped += 1
+                        continue
+    
+                    # ドアの場合はリストに追加（後で壁の切り抜きに使用）
+                    if category_lower == "door" or "door" in name.lower():
+                        door_objects.append(obj)
+                        omni.log.info(f"[Door] Detected door '{name}' at X={obj.get('X', 0)}, Y={obj.get('Y', 0)}")
+    
+                    # 検索クエリを生成
+                    search_query = self._build_search_query_from_object(obj)
+    
+                    omni.log.info(
+                        f"[Search] Querying '{search_query}' "
+                        f"(Original name: '{name}', category: '{category}') "
+                        f"({index + 1}/{len(objects)})"
+                    )
+                    try:
+                        # ベクトルベースのセマンティック検索APIを使用
+                        # 直接USDファイルのURLが返されるため、再帰的検索は不要
+                        asset_url = await self._semantic_search_asset(search_query, normalized_root)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        omni.log.error(f"Vector search failed for '{name}': {exc}")
+                        skipped += 1
+                        continue
+    
+                    if not asset_url:
+                        omni.log.warn(f"No matching USD asset found for '{name}' (searched as '{search_query}').")
+                        skipped += 1
+                        continue
+    
+                    prim_path = await self._reference_asset(stage, root_prim_path, name, asset_url, obj)
+                    if prim_path:
+                        omni.log.info(f"Placed '{name}' at {prim_path}")
                         placed += 1
                     else:
                         skipped += 1
-                    continue
-
-                # ドアの場合はリストに追加（後で壁の切り抜きに使用）
-                if category_lower == "door" or "door" in name.lower():
-                    door_objects.append(obj)
-                    omni.log.info(f"[Door] Detected door '{name}' at X={obj.get('X', 0)}, Y={obj.get('Y', 0)}")
-
-                # 検索クエリを生成
-                search_query = self._build_search_query_from_object(obj)
-
-                omni.log.info(
-                    f"[Search] Querying '{search_query}' "
-                    f"(Original name: '{name}', category: '{category}') "
-                    f"({index + 1}/{len(objects)})"
-                )
-                try:
-                    # ベクトルベースのセマンティック検索APIを使用
-                    # 直接USDファイルのURLが返されるため、再帰的検索は不要
-                    asset_url = await self._semantic_search_asset(search_query, normalized_root)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:
-                    omni.log.error(f"Vector search failed for '{name}': {exc}")
-                    skipped += 1
-                    continue
-
-                if not asset_url:
-                    omni.log.warn(f"No matching USD asset found for '{name}' (searched as '{search_query}').")
-                    skipped += 1
-                    continue
-
-                prim_path = await self._reference_asset(stage, root_prim_path, name, asset_url, obj)
-                if prim_path:
-                    omni.log.info(f"Placed '{name}' at {prim_path}")
-                    placed += 1
-                else:
-                    skipped += 1
-
-                await asyncio.sleep(0)
-
-            # すべてのオブジェクト配置が完了した後、壁を生成
-            omni.log.info("=== Generating procedural walls ===")
-            wall_paths: List[str] = []
-            window_paths: List[str] = []
-
-            rooms = layout_data.get("rooms") or []
-            outer_polygon = layout_data.get("outer_polygon")
-            room_polygon = layout_data.get("room_polygon")
-            openings: List[Dict[str, object]] = []
-
-            if rooms:
-                for room in rooms:
-                    openings.extend(room.get("openings") or [])
-            if isinstance(layout_data.get("openings"), list):
-                openings.extend(layout_data.get("openings") or [])
-
-            openings = self._dedupe_openings(openings)
-            interior_openings = [
-                op for op in openings if str(op.get("type", "") or "").lower() == "door"
-            ]
-            used_polygon_walls = False
-
-            if rooms or outer_polygon or room_polygon:
-                try:
-                    outer_edges: List[Dict[str, object]] = []
-                    if outer_polygon:
-                        outer_points = self._wall_generator._normalize_polygon_points(outer_polygon)
-                        if len(outer_points) >= 3:
-                            outer_edges = self._wall_generator._build_edges(outer_points)
-                        if outer_edges:
-                            wall_chunk, window_chunk = self._wall_generator.generate_walls_from_polygon(
-                                stage, root_prim_path, outer_polygon, openings
-                            )
-                            wall_paths.extend(wall_chunk)
-                            window_paths.extend(window_chunk)
-
-                    if rooms:
-                        room_edges: List[Dict[str, object]] = []
-                        for room in rooms:
-                            polygon = room.get("room_polygon")
-                            if not polygon:
-                                continue
-                            room_points = self._wall_generator._normalize_polygon_points(polygon)
-                            if len(room_points) < 3:
-                                continue
-                            room_edges.extend(self._wall_generator._build_edges(room_points))
-
-                        if room_edges:
-                            merged_edges = self._merge_axis_aligned_edges(room_edges)
+    
+                    await asyncio.sleep(0)
+    
+                # すべてのオブジェクト配置が完了した後、壁を生成
+                omni.log.info("=== Generating procedural walls ===")
+                wall_paths: List[str] = []
+                window_paths: List[str] = []
+    
+                rooms = layout_data.get("rooms") or []
+                outer_polygon = layout_data.get("outer_polygon")
+                room_polygon = layout_data.get("room_polygon")
+                openings: List[Dict[str, object]] = []
+    
+                if rooms:
+                    for room in rooms:
+                        openings.extend(room.get("openings") or [])
+                if isinstance(layout_data.get("openings"), list):
+                    openings.extend(layout_data.get("openings") or [])
+    
+                openings = self._dedupe_openings(openings)
+                interior_openings = [
+                    op for op in openings if str(op.get("type", "") or "").lower() == "door"
+                ]
+                used_polygon_walls = False
+    
+                if rooms or outer_polygon or room_polygon:
+                    try:
+                        outer_edges: List[Dict[str, object]] = []
+                        if outer_polygon:
+                            outer_points = self._wall_generator._normalize_polygon_points(outer_polygon)
+                            if len(outer_points) >= 3:
+                                outer_edges = self._wall_generator._build_edges(outer_points)
                             if outer_edges:
-                                merged_edges = self._filter_edges_against_outer(
-                                    merged_edges, outer_edges
-                                )
-                            if merged_edges:
-                                wall_chunk, window_chunk = self._wall_generator.generate_walls_from_edges(
-                                    stage, root_prim_path, merged_edges, interior_openings
+                                wall_chunk, window_chunk = self._wall_generator.generate_walls_from_polygon(
+                                    stage, root_prim_path, outer_polygon, openings
                                 )
                                 wall_paths.extend(wall_chunk)
                                 window_paths.extend(window_chunk)
-
-                    elif room_polygon and not outer_polygon:
-                        wall_chunk, window_chunk = self._wall_generator.generate_walls_from_polygon(
-                            stage, root_prim_path, room_polygon, openings
+    
+                        if rooms:
+                            room_edges: List[Dict[str, object]] = []
+                            for room in rooms:
+                                polygon = room.get("room_polygon")
+                                if not polygon:
+                                    continue
+                                room_points = self._wall_generator._normalize_polygon_points(polygon)
+                                if len(room_points) < 3:
+                                    continue
+                                room_edges.extend(self._wall_generator._build_edges(room_points))
+    
+                            if room_edges:
+                                merged_edges = self._merge_axis_aligned_edges(room_edges)
+                                if outer_edges:
+                                    merged_edges = self._filter_edges_against_outer(
+                                        merged_edges, outer_edges
+                                    )
+                                if merged_edges:
+                                    wall_chunk, window_chunk = self._wall_generator.generate_walls_from_edges(
+                                        stage, root_prim_path, merged_edges, interior_openings
+                                    )
+                                    wall_paths.extend(wall_chunk)
+                                    window_paths.extend(window_chunk)
+    
+                        elif room_polygon and not outer_polygon:
+                            wall_chunk, window_chunk = self._wall_generator.generate_walls_from_polygon(
+                                stage, root_prim_path, room_polygon, openings
+                            )
+                            wall_paths.extend(wall_chunk)
+                            window_paths.extend(window_chunk)
+    
+                        used_polygon_walls = bool(wall_paths or window_paths)
+                    except Exception as exc:
+                        omni.log.warn(
+                            f"Polygon wall generation failed, falling back to rectangular walls: {exc}"
                         )
-                        wall_paths.extend(wall_chunk)
-                        window_paths.extend(window_chunk)
-
-                    used_polygon_walls = bool(wall_paths or window_paths)
-                except Exception as exc:
-                    omni.log.warn(
-                        f"Polygon wall generation failed, falling back to rectangular walls: {exc}"
-                    )
-                    used_polygon_walls = False
-
-            if not used_polygon_walls:
-                area_size_x = layout_data.get("area_size_X")
-                area_size_y = layout_data.get("area_size_Y")
-                origin_mode = "center"
-
-                if isinstance(area_size_x, (int, float)) and isinstance(area_size_y, (int, float)):
-                    # Heuristic: if all object coords are inside [0, size], treat origin as bottom-left.
-                    try:
-                        xs = [float(obj.get("X")) for obj in objects if obj.get("X") is not None]
-                        ys = [float(obj.get("Y")) for obj in objects if obj.get("Y") is not None]
-                        if xs and ys:
-                            min_x, max_x = min(xs), max(xs)
-                            min_y, max_y = min(ys), max(ys)
-                            tol = 1e-3
-                            if (
-                                min_x >= -tol
-                                and min_y >= -tol
-                                and max_x <= float(area_size_x) + tol
-                                and max_y <= float(area_size_y) + tol
-                            ):
-                                origin_mode = "bottom_left"
-                    except Exception:
-                        origin_mode = "center"
-
-                    wall_paths = self._create_procedural_walls(
-                        stage,
-                        root_prim_path,
-                        float(area_size_x),
-                        float(area_size_y),
-                        door_objects,
-                        origin_mode,
-                    )
-                else:
-                    omni.log.warn(
-                        "Cannot generate walls: area_size_X or area_size_Y not found in layout data. "
-                        f"area_size_X={area_size_x}, area_size_Y={area_size_y}"
-                    )
-
-            placed += len(wall_paths) + len(window_paths)
-            omni.log.info(
-                f"Generated {len(wall_paths)} wall segments and {len(window_paths)} window panes"
-            )
-            omni.log.info(f"USD Search placement finished. Placed={placed}, Skipped={skipped}")
-        except asyncio.CancelledError:
-            omni.log.warn("USD Search placement cancelled.")
-            raise
-        except Exception as exc:
-            omni.log.error(f"Unexpected error during USD Search placement: {exc}")
-        finally:
-            self._search_task = None
-
+                        used_polygon_walls = False
+    
+                if not used_polygon_walls:
+                    area_size_x = layout_data.get("area_size_X")
+                    area_size_y = layout_data.get("area_size_Y")
+                    origin_mode = "center"
+    
+                    if isinstance(area_size_x, (int, float)) and isinstance(area_size_y, (int, float)):
+                        # Heuristic: if all object coords are inside [0, size], treat origin as bottom-left.
+                        try:
+                            xs = [float(obj.get("X")) for obj in objects if obj.get("X") is not None]
+                            ys = [float(obj.get("Y")) for obj in objects if obj.get("Y") is not None]
+                            if xs and ys:
+                                min_x, max_x = min(xs), max(xs)
+                                min_y, max_y = min(ys), max(ys)
+                                tol = 1e-3
+                                if (
+                                    min_x >= -tol
+                                    and min_y >= -tol
+                                    and max_x <= float(area_size_x) + tol
+                                    and max_y <= float(area_size_y) + tol
+                                ):
+                                    origin_mode = "bottom_left"
+                        except Exception:
+                            origin_mode = "center"
+    
+                        wall_paths = self._create_procedural_walls(
+                            stage,
+                            root_prim_path,
+                            float(area_size_x),
+                            float(area_size_y),
+                            door_objects,
+                            origin_mode,
+                        )
+                    else:
+                        omni.log.warn(
+                            "Cannot generate walls: area_size_X or area_size_Y not found in layout data. "
+                            f"area_size_X={area_size_x}, area_size_Y={area_size_y}"
+                        )
+    
+                placed += len(wall_paths) + len(window_paths)
+                omni.log.info(
+                    f"Generated {len(wall_paths)} wall segments and {len(window_paths)} window panes"
+                )
+                omni.log.info(f"USD Search placement finished. Placed={placed}, Skipped={skipped}")
+            except asyncio.CancelledError:
+                omni.log.warn("USD Search placement cancelled.")
+                raise
+            except Exception as exc:
+                omni.log.error(f"Unexpected error during USD Search placement: {exc}")
+            finally:
+                self._search_task = None
+    
     async def _blacklist_and_replace_selected_asset(self, prim_path: str) -> None:
         await self._replace_selected_asset(prim_path, add_to_blacklist=True)
 

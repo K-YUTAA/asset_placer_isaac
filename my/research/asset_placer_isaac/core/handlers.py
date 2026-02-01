@@ -199,8 +199,40 @@ class HandlersMixin:
         omni.log.info("JSON file loaded successfully")
         omni.log.info(f"Layout data: {self._layout_json}")
 
-        # フェーズ4に進む
+    def _on_generate_from_loaded_json_click(self):
+        """読み込まれているJSONからUSD Search配置を開始する"""
+        layout_data = None
+
+        if getattr(self, "_layout_json", None):
+            layout_data = self._layout_json
+        elif getattr(self, "_loaded_json_path", ""):
+            layout_data = self._load_json_with_fallback(self._loaded_json_path)
+
+        if layout_data is None:
+            omni.log.warn("No loaded JSON available. Load a JSON file first.")
+            return
+
+        self._layout_json = layout_data
         self._start_asset_search(self._layout_json)
+
+    
+    def _on_place_debug_bboxes_click(self):
+        """JSON?????????????BBox?????"""
+        layout_data = None
+
+        if getattr(self, "_layout_json", None):
+            layout_data = self._layout_json
+        elif getattr(self, "_loaded_json_path", ""):
+            layout_data = self._load_json_with_fallback(self._loaded_json_path)
+        elif getattr(self, "_generated_json_path", ""):
+            layout_data = self._load_json_with_fallback(self._generated_json_path)
+
+        if layout_data is None:
+            omni.log.warn("No JSON data available for debug bboxes. Load or generate a JSON first.")
+            return
+
+        self._layout_json = layout_data
+        self._place_debug_bboxes(layout_data)
 
     def _on_select_image_click(self):
         """画像ファイル選択ボタンのコールバック"""

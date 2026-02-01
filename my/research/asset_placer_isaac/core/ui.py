@@ -66,22 +66,22 @@ class UIMixin:
 
                 # omni.ui.StringField の style プロパティに渡すスタイル辞書
                 # "Font" キー（大文字のF）にファイルパスを指定
-                style = {
-                    "Font": font_path,
-                    "font_size": 14
-                }
+                style = {"Font": font_path, "font_size": 14}
 
                 omni.log.info("✓ フォントスタイル設定完了")
                 return style
 
             # すべてのフォントが見つからなかった場合
             omni.log.warn("⚠ 日本語フォントが見つかりませんでした")
-            omni.log.warn("  デフォルトフォントを使用します（日本語が文字化けする可能性があります）")
+            omni.log.warn(
+                "  デフォルトフォントを使用します（日本語が文字化けする可能性があります）"
+            )
             return {}
 
         except Exception as e:
             omni.log.error(f"✗ 日本語フォント設定中にエラーが発生: {e}")
             import traceback
+
             omni.log.error(f"スタックトレース:\n{traceback.format_exc()}")
             return {}
 
@@ -98,6 +98,7 @@ class UIMixin:
                 omni.log.warn(f"Failed to destroy window: {exc}")
 
         if hasattr(app, "next_update_async"):
+
             async def _wait_then_destroy():
                 try:
                     await app.next_update_async()
@@ -109,6 +110,7 @@ class UIMixin:
             return
 
         if hasattr(app, "next_update"):
+
             def _on_next_update(_dt):
                 _destroy_window()
 
@@ -140,33 +142,51 @@ class UIMixin:
         prompt2_text, prompt2_source = self._resolve_prompt_text(
             self._prompt2_path, "prompt_2.txt", DEFAULT_PROMPT2_TEXT, "Prompt 2"
         )
-        dims_text = self._read_text_with_fallback(self._dimensions_path, "Dimensions", required=False) or ""
+        dims_text = (
+            self._read_text_with_fallback(
+                self._dimensions_path, "Dimensions", required=False
+            )
+            or ""
+        )
 
         self._prompt1_preview_model.set_value(prompt1_text)
         self._prompt2_preview_model.set_value(prompt2_text)
         self._dims_preview_model.set_value(dims_text)
 
         if self._prompt1_preview_label:
-            self._prompt1_preview_label.text = f"Prompt 1 Preview ({self._format_preview_source(prompt1_source)})"
+            self._prompt1_preview_label.text = (
+                f"Prompt 1 Preview ({self._format_preview_source(prompt1_source)})"
+            )
         if self._prompt2_preview_label:
-            self._prompt2_preview_label.text = f"Prompt 2 Preview ({self._format_preview_source(prompt2_source)})"
+            self._prompt2_preview_label.text = (
+                f"Prompt 2 Preview ({self._format_preview_source(prompt2_source)})"
+            )
         if self._dims_preview_label:
-            dims_source = os.path.basename(self._dimensions_path) if self._dimensions_path else "No file selected"
+            dims_source = (
+                os.path.basename(self._dimensions_path)
+                if self._dimensions_path
+                else "No file selected"
+            )
             self._dims_preview_label.text = f"Dimensions Preview ({dims_source})"
 
     def _update_image_preview(self) -> None:
         if not self._image_preview_label or not self._image_preview_provider:
             return
         if self._image_path and os.path.exists(self._image_path):
-            self._image_preview_label.text = f"Image Preview ({os.path.basename(self._image_path)})"
+            self._image_preview_label.text = (
+                f"Image Preview ({os.path.basename(self._image_path)})"
+            )
             try:
                 from PIL import Image
+
                 image = Image.open(self._image_path).convert("RGBA")
                 max_width, max_height = 560, 320
                 if image.width > max_width or image.height > max_height:
                     image.thumbnail((max_width, max_height), Image.LANCZOS)
                 data = list(image.tobytes())
-                self._image_preview_provider.set_bytes_data(data, [image.width, image.height])
+                self._image_preview_provider.set_bytes_data(
+                    data, [image.width, image.height]
+                )
                 if self._image_preview_frame:
                     self._image_preview_frame.rebuild()
                 return
@@ -185,7 +205,10 @@ class UIMixin:
         if hasattr(self, "_blacklist_count_label") and self._blacklist_count_label:
             count = len(getattr(self, "_asset_blacklist", []))
             self._blacklist_count_label.text = f"Blacklisted: {count}"
-        if hasattr(self, "_blacklist_window_count_label") and self._blacklist_window_count_label:
+        if (
+            hasattr(self, "_blacklist_window_count_label")
+            and self._blacklist_window_count_label
+        ):
             count = len(getattr(self, "_asset_blacklist", []))
             self._blacklist_window_count_label.text = f"Blacklisted: {count}"
 
@@ -209,7 +232,6 @@ class UIMixin:
         self._json_editor_assets_frame.height = ui.Pixel(fixed_height)
         self._json_editor_assets_frame.width = ui.Pixel(width)
 
-
     def _populate_blacklist_list(self):
         if not self._blacklist_list_container:
             return
@@ -219,7 +241,9 @@ class UIMixin:
         for asset_url in sorted(self._asset_blacklist):
             with ui.HStack(height=26):
                 url_model = ui.SimpleStringModel(asset_url)
-                ui.StringField(model=url_model, read_only=True, height=24, width=ui.Fraction(1))
+                ui.StringField(
+                    model=url_model, read_only=True, height=24, width=ui.Fraction(1)
+                )
                 ui.Spacer(width=8)
                 ui.Button(
                     "Remove",
@@ -264,10 +288,22 @@ class UIMixin:
         with self._blacklist_window.frame:
             with ui.VStack(spacing=6, style={"margin": 10}):
                 with ui.HStack(height=28):
-                    self._blacklist_window_count_label = ui.Label("Blacklisted: 0", width=0)
+                    self._blacklist_window_count_label = ui.Label(
+                        "Blacklisted: 0", width=0
+                    )
                     ui.Spacer()
-                    ui.Button("Clear All", clicked_fn=self._clear_blacklist_entries, width=100, height=24)
-                    ui.Button("Close", clicked_fn=self._close_blacklist_window, width=100, height=24)
+                    ui.Button(
+                        "Clear All",
+                        clicked_fn=self._clear_blacklist_entries,
+                        width=100,
+                        height=24,
+                    )
+                    ui.Button(
+                        "Close",
+                        clicked_fn=self._close_blacklist_window,
+                        width=100,
+                        height=24,
+                    )
 
                 ui.Separator()
                 self._blacklist_scrolling_frame = ui.ScrollingFrame(
@@ -275,13 +311,19 @@ class UIMixin:
                     vertical_scrollbar_policy=ui.ScrollBarPolicy.SCROLLBAR_ALWAYS_ON,
                 )
                 with self._blacklist_scrolling_frame:
-                    self._blacklist_list_container = ui.VStack(spacing=6, height=0, style={"margin": 4})
+                    self._blacklist_list_container = ui.VStack(
+                        spacing=6, height=0, style={"margin": 4}
+                    )
 
         self._update_blacklist_label()
         self._rebuild_blacklist_list()
         self._resize_blacklist_window()
-        self._blacklist_window.set_width_changed_fn(lambda _w: self._resize_blacklist_window())
-        self._blacklist_window.set_height_changed_fn(lambda _h: self._resize_blacklist_window())
+        self._blacklist_window.set_width_changed_fn(
+            lambda _w: self._resize_blacklist_window()
+        )
+        self._blacklist_window.set_height_changed_fn(
+            lambda _h: self._resize_blacklist_window()
+        )
 
     def _close_blacklist_window(self):
         if not self._blacklist_window:
@@ -293,7 +335,9 @@ class UIMixin:
         self._blacklist_window_count_label = None
         self._blacklist_scrolling_frame = None
 
-    def _set_generated_json_preview(self, json_path: str, layout_json: Dict[str, object]) -> None:
+    def _set_generated_json_preview(
+        self, json_path: str, layout_json: Dict[str, object]
+    ) -> None:
         self._generated_json_path = json_path or ""
         if not json_path:
             self._generated_json_preview_model.set_value("No generated JSON yet.")
@@ -309,7 +353,9 @@ class UIMixin:
 
         self._generated_json_preview_model.set_value(preview_text)
         if self._generated_json_label:
-            self._generated_json_label.text = f"Latest JSON: {os.path.basename(json_path)}"
+            self._generated_json_label.text = (
+                f"Latest JSON: {os.path.basename(json_path)}"
+            )
 
     def _refresh_generated_json_preview_model(self) -> None:
         if not self._generated_json_path:
@@ -317,16 +363,22 @@ class UIMixin:
             return
 
         if not os.path.exists(self._generated_json_path):
-            self._generated_json_preview_model.set_value(f"File not found: {self._generated_json_path}")
+            self._generated_json_preview_model.set_value(
+                f"File not found: {self._generated_json_path}"
+            )
             return
 
         data = self._load_json_with_fallback(self._generated_json_path)
         if data is None:
-            self._generated_json_preview_model.set_value(f"Failed to load JSON: {self._generated_json_path}")
+            self._generated_json_preview_model.set_value(
+                f"Failed to load JSON: {self._generated_json_path}"
+            )
             return
 
         try:
-            self._generated_json_preview_model.set_value(json.dumps(data, indent=2, ensure_ascii=False))
+            self._generated_json_preview_model.set_value(
+                json.dumps(data, indent=2, ensure_ascii=False)
+            )
         except Exception as exc:  # pragma: no cover - defensive
             omni.log.warn(f"Failed to serialize JSON for preview: {exc}")
             self._generated_json_preview_model.set_value(str(data))
@@ -341,7 +393,9 @@ class UIMixin:
             self._generated_json_preview_window = None
             self._deferred_destroy_window(existing)
 
-        self._generated_json_preview_window = ui.Window("Generated JSON Preview", width=620, height=720)
+        self._generated_json_preview_window = ui.Window(
+            "Generated JSON Preview", width=620, height=720
+        )
         with self._generated_json_preview_window.frame:
             with ui.VStack(spacing=8, style={"margin": 10}):
                 ui.Label(f"Source: {self._generated_json_path}")
@@ -353,7 +407,11 @@ class UIMixin:
                     style=self._japanese_font_style,
                 )
                 ui.Spacer(height=8)
-                ui.Button("Close", clicked_fn=self._close_generated_json_preview_window, width=120)
+                ui.Button(
+                    "Close",
+                    clicked_fn=self._close_generated_json_preview_window,
+                    width=120,
+                )
 
         self._refresh_generated_json_preview_model()
 
@@ -369,16 +427,22 @@ class UIMixin:
             self._loaded_json_preview_model.set_value("No loaded JSON selected.")
             return
         if not os.path.exists(self._loaded_json_path):
-            self._loaded_json_preview_model.set_value(f"File not found: {self._loaded_json_path}")
+            self._loaded_json_preview_model.set_value(
+                f"File not found: {self._loaded_json_path}"
+            )
             return
 
         data = self._load_json_with_fallback(self._loaded_json_path)
         if data is None:
-            self._loaded_json_preview_model.set_value(f"Failed to load JSON: {self._loaded_json_path}")
+            self._loaded_json_preview_model.set_value(
+                f"Failed to load JSON: {self._loaded_json_path}"
+            )
             return
 
         try:
-            self._loaded_json_preview_model.set_value(json.dumps(data, indent=2, ensure_ascii=False))
+            self._loaded_json_preview_model.set_value(
+                json.dumps(data, indent=2, ensure_ascii=False)
+            )
         except Exception as exc:  # pragma: no cover - defensive
             omni.log.warn(f"Failed to serialize JSON for preview: {exc}")
             self._loaded_json_preview_model.set_value(str(data))
@@ -393,7 +457,9 @@ class UIMixin:
             self._loaded_json_preview_window = None
             self._deferred_destroy_window(existing)
 
-        self._loaded_json_preview_window = ui.Window("Loaded JSON Preview", width=620, height=720)
+        self._loaded_json_preview_window = ui.Window(
+            "Loaded JSON Preview", width=620, height=720
+        )
         with self._loaded_json_preview_window.frame:
             with ui.VStack(spacing=8, style={"margin": 10}):
                 ui.Label(f"Source: {self._loaded_json_path}")
@@ -405,7 +471,11 @@ class UIMixin:
                     style=self._japanese_font_style,
                 )
                 ui.Spacer(height=8)
-                ui.Button("Close", clicked_fn=self._close_loaded_json_preview_window, width=120)
+                ui.Button(
+                    "Close",
+                    clicked_fn=self._close_loaded_json_preview_window,
+                    width=120,
+                )
 
         self._refresh_loaded_json_preview_model()
 
@@ -511,7 +581,9 @@ class UIMixin:
             self._json_editor_window = None
             self._deferred_destroy_window(existing)
 
-        self._json_editor_window = ui.Window("Edit JSON Search Prompts", width=860, height=620)
+        self._json_editor_window = ui.Window(
+            "Edit JSON Search Prompts", width=860, height=620
+        )
         self._json_editor_file_combo = None
         self._json_editor_files = []
         self._json_editor_selected_path = ""
@@ -534,24 +606,42 @@ class UIMixin:
                             ui.Label("JSON File:", width=120)
                             combo_items = files if files else ["(no json files)"]
                             self._json_editor_file_combo = ui.ComboBox(0, *combo_items)
-                            ui.Button("Refresh", width=90, clicked_fn=self._on_refresh_json_editor_files)
+                            ui.Button(
+                                "Refresh",
+                                width=90,
+                                clicked_fn=self._on_refresh_json_editor_files,
+                            )
 
                         with ui.HStack(height=26):
-                            ui.Button("Load", width=90, clicked_fn=self._on_load_json_editor_file)
-                            ui.Button("Save", width=90, clicked_fn=self._save_json_editor_changes)
+                            ui.Button(
+                                "Load",
+                                width=90,
+                                clicked_fn=self._on_load_json_editor_file,
+                            )
+                            ui.Button(
+                                "Save",
+                                width=90,
+                                clicked_fn=self._save_json_editor_changes,
+                            )
                             ui.Label("Edit search_prompt per asset", width=0)
 
                 ui.Separator()
 
                 # Scroll area (size is adjusted on window resize)
-                self._json_editor_assets_frame = ui.ScrollingFrame(height=ui.Pixel(360), width=ui.Fraction(1))
+                self._json_editor_assets_frame = ui.ScrollingFrame(
+                    height=ui.Pixel(360), width=ui.Fraction(1)
+                )
                 with self._json_editor_assets_frame:
                     self._build_json_editor_assets_list()
 
         self._on_load_json_editor_file()
         self._resize_json_editor_window()
-        self._json_editor_window.set_width_changed_fn(lambda _w: self._resize_json_editor_window())
-        self._json_editor_window.set_height_changed_fn(lambda _h: self._resize_json_editor_window())
+        self._json_editor_window.set_width_changed_fn(
+            lambda _w: self._resize_json_editor_window()
+        )
+        self._json_editor_window.set_height_changed_fn(
+            lambda _h: self._resize_json_editor_window()
+        )
 
     def _on_refresh_json_editor_files(self):
         self._open_json_editor_window()
@@ -586,7 +676,7 @@ class UIMixin:
                 self._json_editor_asset_models[idx] = model
 
                 with ui.HStack(height=26):
-                    ui.Label(name or f"#{idx+1}", width=180)
+                    ui.Label(name or f"#{idx + 1}", width=180)
                     ui.Label(category, width=120)
                     ui.StringField(model=model, width=ui.Fraction(1))
             ui.Spacer(height=12)
@@ -604,7 +694,9 @@ class UIMixin:
                     self._image_preview_label = ui.Label("Image Preview")
                     self._image_preview_frame = ui.Frame()
                     with self._image_preview_frame:
-                        ui.ImageWithProvider(self._image_preview_provider, width=560, height=320)
+                        ui.ImageWithProvider(
+                            self._image_preview_provider, width=560, height=320
+                        )
 
                     ui.Separator()
                     self._dims_preview_label = ui.Label("Dimensions Preview")
@@ -670,8 +762,12 @@ class UIMixin:
                 ui.Label("Vector Search Tester")
                 with ui.HStack(height=26):
                     ui.Label("Query:", width=60)
-                    ui.StringField(model=self._search_test_query_model, width=ui.Fraction(1))
-                    ui.Button("Search", clicked_fn=self._on_search_test_click, width=100)
+                    ui.StringField(
+                        model=self._search_test_query_model, width=ui.Fraction(1)
+                    )
+                    ui.Button(
+                        "Search", clicked_fn=self._on_search_test_click, width=100
+                    )
 
                 self._search_test_status_label = ui.Label("Ready")
                 ui.Separator()
@@ -682,7 +778,9 @@ class UIMixin:
                     vertical_scrollbar_policy=ui.ScrollBarPolicy.SCROLLBAR_ALWAYS_ON,
                 ):
                     self._search_test_results_frame = ui.Frame()
-                    self._search_test_results_frame.set_build_fn(self._build_search_test_results_frame)
+                    self._search_test_results_frame.set_build_fn(
+                        self._build_search_test_results_frame
+                    )
 
                 ui.Spacer(height=6)
                 ui.Button("Close", clicked_fn=self._close_search_test_window, width=120)
@@ -708,7 +806,11 @@ class UIMixin:
             self._search_test_status_label.text = message
 
     def _on_search_test_click(self) -> None:
-        query = self._search_test_query_model.as_string.strip() if self._search_test_query_model else ""
+        query = (
+            self._search_test_query_model.as_string.strip()
+            if self._search_test_query_model
+            else ""
+        )
         if not query:
             self._set_search_test_status("Query is empty.")
             return
@@ -723,7 +825,9 @@ class UIMixin:
 
     async def _run_search_test(self, query: str) -> None:
         try:
-            results = await self._search_assets_for_query(query, target_valid=10, initial_limit=10, max_limit=200)
+            results = await self._search_assets_for_query(
+                query, target_valid=10, initial_limit=10, max_limit=200
+            )
         except Exception as exc:
             omni.log.warn(f"Search test failed: {exc}")
             self._set_search_test_status("Search failed.")
@@ -739,7 +843,9 @@ class UIMixin:
             self._set_search_test_status(f"Results: {total_results}")
         self._rebuild_search_test_results()
 
-    def _build_search_test_provider(self, image_b64: Optional[str]) -> Optional[ui.ByteImageProvider]:
+    def _build_search_test_provider(
+        self, image_b64: Optional[str]
+    ) -> Optional[ui.ByteImageProvider]:
         if not image_b64:
             return None
         try:
@@ -757,7 +863,9 @@ class UIMixin:
             omni.log.warn(f"Failed to decode search thumbnail: {exc}")
             return None
 
-    def _blacklist_search_result(self, asset_url: str, identity_key: Optional[str]) -> None:
+    def _blacklist_search_result(
+        self, asset_url: str, identity_key: Optional[str]
+    ) -> None:
         added_url = self._add_asset_to_blacklist(asset_url)
         added_key = self._add_asset_key_to_blacklist(identity_key)
         if added_url or added_key:
@@ -818,7 +926,14 @@ class UIMixin:
         def _extract_size(data: object) -> Optional[int]:
             if not isinstance(data, dict):
                 return None
-            for key in ("size", "file_size", "fileSize", "bytes", "file_size_bytes", "content_length"):
+            for key in (
+                "size",
+                "file_size",
+                "fileSize",
+                "bytes",
+                "file_size_bytes",
+                "content_length",
+            ):
                 if key in data:
                     size_val = _coerce_size(data.get(key))
                     if size_val is not None:
@@ -863,7 +978,9 @@ class UIMixin:
 
             def sync_request():
                 user, password = api_basic_auth.split(":", 1)
-                response = requests.post(api_url, json=payload, auth=(user, password), timeout=60)
+                response = requests.post(
+                    api_url, json=payload, auth=(user, password), timeout=60
+                )
                 response.raise_for_status()
                 return response.json()
 
@@ -884,7 +1001,11 @@ class UIMixin:
                 size_val = _extract_size(item_data) or _extract_size(item)
                 score = 0.0
                 if isinstance(item, dict):
-                    score = item.get("score") or item.get("_score") or item_data.get("score", 0.0)
+                    score = (
+                        item.get("score")
+                        or item.get("_score")
+                        or item_data.get("score", 0.0)
+                    )
                 image_b64 = None
                 if isinstance(item, dict):
                     image_b64 = item.get("image") or item_data.get("image")
@@ -909,7 +1030,9 @@ class UIMixin:
                 size_bytes = cand.get("size_bytes")
                 if size_bytes is None:
                     size_bytes = await self._get_asset_size(normalized_url)
-                identity_key = self._build_asset_identity_key(normalized_url, size_bytes)
+                identity_key = self._build_asset_identity_key(
+                    normalized_url, size_bytes
+                )
 
                 if identity_key and identity_key in excluded_keys:
                     continue
@@ -948,7 +1071,9 @@ class UIMixin:
 
             prev_total_hits = total_hits
             limit = min(limit * 2, max_limit)
-            omni.log.info(f"[Vector Search Test] Increasing limit to {limit} for more results.")
+            omni.log.info(
+                f"[Vector Search Test] Increasing limit to {limit} for more results."
+            )
 
     def _build_search_test_results_frame(self):
         self._search_test_result_providers = []
@@ -968,7 +1093,9 @@ class UIMixin:
                     continue
                 if self._is_asset_blacklisted(url):
                     continue
-                identity_key = result.get("identity_key") if isinstance(result, dict) else None
+                identity_key = (
+                    result.get("identity_key") if isinstance(result, dict) else None
+                )
                 if identity_key and identity_key in excluded_keys:
                     continue
 
@@ -996,14 +1123,20 @@ class UIMixin:
                     with ui.VStack(spacing=2, height=0, width=ui.Fraction(1)):
                         ui.Label(os.path.basename(url))
                         url_model = ui.SimpleStringModel(url)
-                        ui.StringField(model=url_model, read_only=True, height=22, width=ui.Fraction(1))
+                        ui.StringField(
+                            model=url_model,
+                            read_only=True,
+                            height=22,
+                            width=ui.Fraction(1),
+                        )
                         if identity_key:
                             ui.Label(f"Key: {identity_key}", height=18)
 
                     ui.Label(f"{score:.2f}", width=60)
                     ui.Button(
                         "Blacklist",
-                        clicked_fn=lambda u=url, k=identity_key: self._blacklist_search_result(u, k),
+                        clicked_fn=lambda u=url,
+                        k=identity_key: self._blacklist_search_result(u, k),
                         width=90,
                         height=24,
                     )
@@ -1043,7 +1176,9 @@ class UIMixin:
             return
 
         meta = self._get_search_metadata_from_prim(ref_prim)
-        search_query = meta.get("search_query") or self._build_search_query_from_object(meta)
+        search_query = meta.get("search_query") or self._build_search_query_from_object(
+            meta
+        )
         if not search_query:
             omni.log.warn("Unable to determine search query for selected asset.")
             return
@@ -1052,7 +1187,9 @@ class UIMixin:
         self._replacement_asset_url = asset_url
         self._replacement_query = search_query
 
-        self._replacement_window = ui.Window("Replacement Candidates", width=920, height=680)
+        self._replacement_window = ui.Window(
+            "Replacement Candidates", width=920, height=680
+        )
         with self._replacement_window.frame:
             with ui.VStack(spacing=8, style={"margin": 10}):
                 ui.Label("Replacement Candidates")
@@ -1061,7 +1198,11 @@ class UIMixin:
                 ui.Label(f"Current asset: {self._replacement_asset_url}", width=0)
 
                 with ui.HStack(height=26):
-                    ui.Button("Refresh", clicked_fn=self._on_refresh_replacement_candidates, width=100)
+                    ui.Button(
+                        "Refresh",
+                        clicked_fn=self._on_refresh_replacement_candidates,
+                        width=100,
+                    )
                     self._replacement_status_label = ui.Label("Searching...", width=0)
 
                 ui.Separator()
@@ -1072,10 +1213,16 @@ class UIMixin:
                     vertical_scrollbar_policy=ui.ScrollBarPolicy.SCROLLBAR_ALWAYS_ON,
                 ):
                     self._replacement_results_frame = ui.Frame()
-                    self._replacement_results_frame.set_build_fn(self._build_replacement_candidates_frame)
+                    self._replacement_results_frame.set_build_fn(
+                        self._build_replacement_candidates_frame
+                    )
 
                 ui.Spacer(height=6)
-                ui.Button("Close", clicked_fn=self._close_replacement_candidates_window, width=120)
+                ui.Button(
+                    "Close",
+                    clicked_fn=self._close_replacement_candidates_window,
+                    width=120,
+                )
 
         self._replacement_results = []
         self._rebuild_replacement_candidates_frame()
@@ -1114,11 +1261,15 @@ class UIMixin:
         self._set_replacement_status("Searching...")
         self._replacement_results = []
         self._rebuild_replacement_candidates_frame()
-        self._replacement_task = asyncio.ensure_future(self._run_replacement_candidates_search(query))
+        self._replacement_task = asyncio.ensure_future(
+            self._run_replacement_candidates_search(query)
+        )
 
     async def _run_replacement_candidates_search(self, query: str) -> None:
         try:
-            results = await self._search_assets_for_query(query, target_valid=20, initial_limit=20, max_limit=200)
+            results = await self._search_assets_for_query(
+                query, target_valid=20, initial_limit=20, max_limit=200
+            )
         except Exception as exc:
             omni.log.warn(f"Replacement candidate search failed: {exc}")
             self._set_replacement_status("Search failed.")
@@ -1126,10 +1277,14 @@ class UIMixin:
 
         filtered = results or []
         root_note = ""
-        search_root = self._search_root_model.as_string if self._search_root_model else ""
+        search_root = (
+            self._search_root_model.as_string if self._search_root_model else ""
+        )
         search_root = search_root.strip()
         if search_root:
-            normalized_root = search_root if search_root.endswith("/") else f"{search_root}/"
+            normalized_root = (
+                search_root if search_root.endswith("/") else f"{search_root}/"
+            )
             root_filtered = [
                 result
                 for result in filtered
@@ -1157,7 +1312,9 @@ class UIMixin:
         async def _do_replace():
             self._set_replacement_status("Replacing...")
             try:
-                await self._replace_selected_asset_with_url(prim_path, replacement_url, add_to_blacklist=False)
+                await self._replace_selected_asset_with_url(
+                    prim_path, replacement_url, add_to_blacklist=False
+                )
             except Exception as exc:  # pragma: no cover - defensive
                 omni.log.warn(f"Replacement failed: {exc}")
                 self._set_replacement_status("Replace failed.")
@@ -1180,7 +1337,11 @@ class UIMixin:
             return
 
         excluded_keys = set(getattr(self, "_asset_blacklist_keys", set()))
-        current_norm = self._normalize_asset_url(self._replacement_asset_url) if self._replacement_asset_url else ""
+        current_norm = (
+            self._normalize_asset_url(self._replacement_asset_url)
+            if self._replacement_asset_url
+            else ""
+        )
         row_height = SEARCH_TEST_THUMB_SIZE + 36
         shown = 0
         with ui.VStack(spacing=6):
@@ -1188,7 +1349,9 @@ class UIMixin:
                 url = result.get("url", "") if isinstance(result, dict) else ""
                 if not url:
                     continue
-                identity_key = result.get("identity_key") if isinstance(result, dict) else None
+                identity_key = (
+                    result.get("identity_key") if isinstance(result, dict) else None
+                )
                 is_blacklisted = False
                 if self._is_asset_blacklisted(url):
                     is_blacklisted = True
@@ -1199,7 +1362,11 @@ class UIMixin:
                     score = float(result.get("score", 0) or 0.0)
                 except (TypeError, ValueError):
                     score = 0.0
-                is_current = self._normalize_asset_url(url) == current_norm if current_norm else False
+                is_current = (
+                    self._normalize_asset_url(url) == current_norm
+                    if current_norm
+                    else False
+                )
                 label_text = f"#{idx} {url}"
                 if is_current:
                     label_text += " (current)"
@@ -1209,7 +1376,9 @@ class UIMixin:
                 shown += 1
                 with ui.HStack(height=row_height, spacing=8):
                     with ui.VStack(width=SEARCH_TEST_THUMB_SIZE, spacing=4):
-                        provider = self._build_search_test_provider(result.get("image_b64"))
+                        provider = self._build_search_test_provider(
+                            result.get("image_b64")
+                        )
                         if provider:
                             self._replacement_result_providers.append(provider)
                             ui.ImageWithProvider(
@@ -1225,7 +1394,9 @@ class UIMixin:
                             )
                         ui.Button(
                             "Replace",
-                            clicked_fn=lambda u=url: self._on_replace_candidate_click(u),
+                            clicked_fn=lambda u=url: self._on_replace_candidate_click(
+                                u
+                            ),
                             width=SEARCH_TEST_THUMB_SIZE,
                         )
 
@@ -1234,7 +1405,9 @@ class UIMixin:
                         ui.Label(f"Score: {score:.4f}", width=0)
 
             if shown == 0:
-                ui.Label("No displayable results (all filtered or missing URLs).", width=0)
+                ui.Label(
+                    "No displayable results (all filtered or missing URLs).", width=0
+                )
 
     def _rebuild_replacement_candidates_frame(self) -> None:
         if not self._replacement_results_frame:
@@ -1257,43 +1430,88 @@ class UIMixin:
         if self._active_tab == 0:
             # タブ 1: "Generate from Image"
             with ui.VStack(spacing=5, height=0):
-                ui.Label("Step 1: Select inputs and generate JSON using AI.")
+                ui.Label("AI Generation (Image -> JSON)")
+                ui.Separator()
+                ui.Label("Inputs")
 
-                # 画像ファイル選択
-                with ui.HStack(height=25):
-                    ui.Button("Select Image File...", clicked_fn=self._on_select_image_click, width=150)
-                    image_label_text = os.path.basename(self._image_path) if self._image_path else "No file selected"
-                    self._image_label = ui.Label(image_label_text, width=0)
+                with ui.HStack(spacing=10, height=0):
+                    with ui.VStack(spacing=6, width=ui.Fraction(1)):
+                        # 画像ファイル選択
+                        with ui.HStack(height=25):
+                            ui.Button(
+                                "Load Image File...",
+                                clicked_fn=self._on_select_image_click,
+                                width=150,
+                            )
+                            image_label_text = (
+                                os.path.basename(self._image_path)
+                                if self._image_path
+                                else "No file loaded"
+                            )
+                            self._image_label = ui.Label(image_label_text, width=0)
 
-                # 寸法ファイル選択
+                        # 寸法ファイル選択
+                        with ui.HStack(height=25):
+                            ui.Button(
+                                "Load Dimensions File...",
+                                clicked_fn=self._on_select_dims_click,
+                                width=150,
+                            )
+                            dims_label_text = (
+                                os.path.basename(self._dimensions_path)
+                                if self._dimensions_path
+                                else "No file loaded"
+                            )
+                            self._dims_label = ui.Label(dims_label_text, width=0)
+
+                    with ui.VStack(spacing=6, width=ui.Fraction(1)):
+                        # プロンプト1選択（オプション）
+                        with ui.HStack(height=25):
+                            ui.Button(
+                                "Load Prompt 1 (optional)...",
+                                clicked_fn=self._on_select_prompt1_click,
+                                width=150,
+                            )
+                            prompt1_label_text = (
+                                os.path.basename(self._prompt1_path)
+                                if self._prompt1_path
+                                else "Using default"
+                            )
+                            self._prompt1_label = ui.Label(prompt1_label_text, width=0)
+
+                        # プロンプト2選択（オプション）
+                        with ui.HStack(height=25):
+                            ui.Button(
+                                "Load Prompt 2 (optional)...",
+                                clicked_fn=self._on_select_prompt2_click,
+                                width=150,
+                            )
+                            prompt2_label_text = (
+                                os.path.basename(self._prompt2_path)
+                                if self._prompt2_path
+                                else "Using default"
+                            )
+                            self._prompt2_label = ui.Label(prompt2_label_text, width=0)
+
                 with ui.HStack(height=25):
-                    ui.Button("Select Dimensions File...", clicked_fn=self._on_select_dims_click, width=150)
-                    dims_label_text = (
-                        os.path.basename(self._dimensions_path) if self._dimensions_path else "No file selected"
+                    ui.Button(
+                        "Preview Inputs...",
+                        clicked_fn=self._open_preview_window,
+                        width=150,
                     )
-                    self._dims_label = ui.Label(dims_label_text, width=0)
+                    ui.Label("Preview loaded image/dimensions/prompts", width=0)
 
-                # プロンプト1選択（オプション）
-                with ui.HStack(height=25):
-                    ui.Button("Select Prompt 1 (optional)...", clicked_fn=self._on_select_prompt1_click, width=150)
-                    prompt1_label_text = os.path.basename(self._prompt1_path) if self._prompt1_path else "Using default"
-                    self._prompt1_label = ui.Label(prompt1_label_text, width=0)
-
-                # プロンプト2選択（オプション）
-                with ui.HStack(height=25):
-                    ui.Button("Select Prompt 2 (optional)...", clicked_fn=self._on_select_prompt2_click, width=150)
-                    prompt2_label_text = os.path.basename(self._prompt2_path) if self._prompt2_path else "Using default"
-                    self._prompt2_label = ui.Label(prompt2_label_text, width=0)
-
-                with ui.HStack(height=25):
-                    ui.Button("Open Preview...", clicked_fn=self._open_preview_window, width=150)
-                    ui.Label("Preview selected image/prompts/dimensions", width=0)
-
-                ui.Spacer(height=10)
+                ui.Spacer(height=6)
+                ui.Separator()
+                ui.Label("AI Settings")
 
                 # モデル選択
                 # インデックスの範囲チェック（MODEL_CHOICESの範囲内）
-                model_index = self._saved_model_index if 0 <= self._saved_model_index < len(MODEL_CHOICES) else 0
+                model_index = (
+                    self._saved_model_index
+                    if 0 <= self._saved_model_index < len(MODEL_CHOICES)
+                    else 0
+                )
                 with ui.HStack(height=25):
                     ui.Label("AI Model:", width=150)
                     self._model_combo = ui.ComboBox(model_index, *MODEL_CHOICES)
@@ -1301,12 +1519,20 @@ class UIMixin:
                     self._model_combo.model.get_item_value_model().add_value_changed_fn(
                         lambda m: self._save_settings_to_json()
                     )
-                    ui.Button("AI Settings...", clicked_fn=self._open_ai_settings_window, width=120)
+                    ui.Button(
+                        "Advanced AI Settings...",
+                        clicked_fn=self._open_ai_settings_window,
+                        width=180,
+                    )
 
                 # APIキー入力
                 with ui.HStack(height=25):
                     ui.Label("OpenAI API Key:", width=150)
                     ui.StringField(model=self._api_key_model, password_mode=True)
+
+                ui.Spacer(height=6)
+                ui.Separator()
+                ui.Label("Search & Placement")
 
                 # USD Search ルート
                 with ui.HStack(height=25):
@@ -1314,37 +1540,78 @@ class UIMixin:
                     ui.StringField(model=self._search_root_model)
 
                 with ui.HStack(height=25):
-                    ui.Button("Search Tester...", clicked_fn=self._open_search_test_window, width=150)
-                    ui.Label("Search preview", width=0)
+                    ui.Button(
+                        "Open Search Tester...",
+                        clicked_fn=self._open_search_test_window,
+                        width=170,
+                    )
+                    ui.Label("Test search results", width=0)
 
-                self._build_asset_orientation_section(show_attach=False, show_replace_candidates=True)
+                self._build_asset_orientation_section(
+                    show_attach=False, show_replace_candidates=True
+                )
 
-                ui.Spacer(height=10)
+                ui.Spacer(height=8)
+                ui.Separator()
+                ui.Label("Generation")
 
-                # 承認ワークフローのチェックボックス
-                with ui.HStack(height=25):
-                    ui.CheckBox(model=self._require_approval, width=20)
-                    ui.Label("Require approval after image analysis")
-
-                self._generate_button = ui.Button("Generate JSON (AI)", clicked_fn=self._on_generate_json_click, height=30)
                 with ui.HStack(height=24):
-                    self._cancel_ai_button = ui.Button("Cancel AI", clicked_fn=self._on_cancel_ai_click, width=120, height=24)
+                    self._generate_button = ui.Button(
+                        "Generate JSON & Scene",
+                        clicked_fn=self._on_generate_json_click,
+                        width=220,
+                        height=24,
+                    )
+                    ui.Spacer(width=10)
+                    ui.CheckBox(
+                        model=self._require_approval,
+                        width=18,
+                        height=18,
+                        alignment=ui.Alignment.CENTER,
+                    )
+                    ui.Spacer(width=4)
+                    ui.Label(
+                        "Require approval after analysis",
+                        height=24,
+                        alignment=ui.Alignment.LEFT_CENTER,
+                    )
+                with ui.HStack(height=24):
+                    self._cancel_ai_button = ui.Button(
+                        "Cancel AI",
+                        clicked_fn=self._on_cancel_ai_click,
+                        width=120,
+                        height=24,
+                    )
                     self._cancel_ai_button.visible = False
                     status_text = getattr(self, "_ai_status_text", "AI Status: Idle")
                     self._ai_status_label = ui.Label(status_text, width=0)
                 with ui.HStack(height=20):
                     tokens_text = getattr(self, "_ai_tokens_text", "Tokens: -")
                     self._ai_tokens_label = ui.Label(tokens_text, width=0)
+                ui.Separator()
+                ui.Label("Generated JSON")
                 with ui.HStack(height=25):
-                    ui.Button("Preview Generated JSON", clicked_fn=self._open_generated_json_preview_window, width=170)
+                    ui.Button(
+                        "Preview Generated JSON...",
+                        clicked_fn=self._open_generated_json_preview_window,
+                        width=190,
+                    )
                     label_text = (
                         f"Latest JSON: {os.path.basename(self._generated_json_path)}"
                         if self._generated_json_path
                         else "Latest JSON: None"
                     )
                     self._generated_json_label = ui.Label(label_text, width=0)
+
+                ui.Spacer(height=6)
+                ui.Separator()
+                ui.Label("Loaded JSON")
                 with ui.HStack(height=25):
-                    ui.Button("Load JSON File...", clicked_fn=self._on_load_json_click, width=170)
+                    ui.Button(
+                        "Load JSON File...",
+                        clicked_fn=self._on_load_json_click,
+                        width=190,
+                    )
                     loaded_label_text = (
                         f"Loaded JSON: {os.path.basename(self._loaded_json_path)}"
                         if self._loaded_json_path
@@ -1352,23 +1619,41 @@ class UIMixin:
                     )
                     self._loaded_json_label = ui.Label(loaded_label_text, width=0)
                 with ui.HStack(height=26):
-                    ui.Button("Preview Selected JSON...", clicked_fn=self._open_loaded_json_preview_window, width=190)
-                    ui.Button("Edit Selected JSON...", clicked_fn=self._open_loaded_json_editor, width=190)
-                    ui.Label("Preview/edit the JSON chosen via Load JSON File", width=0)
+                    ui.Button(
+                        "Preview Loaded JSON...",
+                        clicked_fn=self._open_loaded_json_preview_window,
+                        width=190,
+                    )
+                    ui.Button(
+                        "Edit Loaded JSON...",
+                        clicked_fn=self._open_loaded_json_editor,
+                        width=190,
+                    )
+                    ui.Label("Preview or edit the loaded JSON", width=0)
                 with ui.HStack(height=25):
-                    ui.Button("Edit JSON...", clicked_fn=self._open_json_editor_window, width=170)
-                    ui.Label("Edit search_prompt per asset", width=0)
-
+                    ui.Button(
+                        "Place JSON BBoxes (Debug)",
+                        clicked_fn=self._on_place_debug_bboxes_click,
+                        width=220,
+                    )
+                    ui.Label("Debug: place JSON BBoxes only", width=0)
+                with ui.HStack(height=25):
+                    ui.Button(
+                        "Generate Scene from JSON",
+                        clicked_fn=self._on_generate_from_loaded_json_click,
+                        width=220,
+                    )
+                    ui.Label("Place assets using the loaded JSON", width=0)
                 ui.Spacer(height=10)
 
                 # --- LLM分析結果表示欄 ---
-                ui.Label("AI Analysis Result:")
+                ui.Label("AI Output:")
                 self._analysis_text_field = ui.StringField(
                     model=self._analysis_text_model,
                     multiline=True,
                     read_only=True,
                     height=300,
-                    style=self._japanese_font_style  # 日本語フォント適用
+                    style=self._japanese_font_style,  # 日本語フォント適用
                 )
 
                 ui.Spacer(height=5)
@@ -1376,25 +1661,43 @@ class UIMixin:
                 ui.Separator()
 
                 # 承認/拒否ボタン（最初は非表示）
-                with ui.HStack(height=34, visible=False) as self._approval_buttons_container:
-                    ui.Button("✓ Approve & Continue", clicked_fn=self._on_approve_click, width=0, height=30)
+                with ui.HStack(
+                    height=34, visible=False
+                ) as self._approval_buttons_container:
+                    ui.Button(
+                        "✓ Approve & Continue",
+                        clicked_fn=self._on_approve_click,
+                        width=0,
+                        height=30,
+                    )
                     ui.Spacer(width=10)
-                    ui.Button("✗ Reject & Add Context", clicked_fn=self._on_reject_click, width=0, height=30)
+                    ui.Button(
+                        "✗ Reject & Add Context",
+                        clicked_fn=self._on_reject_click,
+                        width=0,
+                        height=30,
+                    )
 
                 ui.Spacer(height=5)
 
         elif self._active_tab == 1:
             # Tab 2: "Details"
             with ui.VStack(spacing=5, height=0):
-                ui.Label("Details")
+                ui.Label("Metadata & Tools")
                 ui.Separator()
-                ui.Label("Metadata / Advanced")
+                ui.Label("Metadata")
                 with ui.HStack(height=25):
-                    ui.Button("Attach Metadata", clicked_fn=self._on_attach_metadata_selected_prim_click, width=150)
+                    ui.Button(
+                        "Attach Placement Metadata",
+                        clicked_fn=self._on_attach_metadata_selected_prim_click,
+                        width=200,
+                    )
                     ui.Label("Attach placement metadata to selected prim", width=0)
 
                 ui.Spacer(height=8)
-                self._build_asset_orientation_section(show_attach=False, show_replace_candidates=True)
+                self._build_asset_orientation_section(
+                    show_attach=False, show_replace_candidates=True
+                )
                 ui.Spacer()
 
     # --- "Load from File" タブのコールバック ---
@@ -1405,7 +1708,9 @@ class UIMixin:
             self._ai_settings_window = None
             self._deferred_destroy_window(existing)
 
-        self._ai_settings_window = ui.Window("AI Advanced Settings", width=560, height=580)
+        self._ai_settings_window = ui.Window(
+            "AI Advanced Settings", width=560, height=580
+        )
         with self._ai_settings_window.frame:
             with ui.ScrollingFrame():
                 with ui.VStack(spacing=8, style={"margin": 10}):
@@ -1418,10 +1723,14 @@ class UIMixin:
                     if step2_index < 0 or step2_index >= len(ADV_MODEL_CHOICES):
                         step2_index = 0
                     effort_index = self._ai_reasoning_effort_index
-                    if effort_index < 0 or effort_index >= len(REASONING_EFFORT_CHOICES):
+                    if effort_index < 0 or effort_index >= len(
+                        REASONING_EFFORT_CHOICES
+                    ):
                         effort_index = 0
                     verbosity_index = self._ai_text_verbosity_index
-                    if verbosity_index < 0 or verbosity_index >= len(TEXT_VERBOSITY_CHOICES):
+                    if verbosity_index < 0 or verbosity_index >= len(
+                        TEXT_VERBOSITY_CHOICES
+                    ):
                         verbosity_index = 0
                     detail_index = self._ai_image_detail_index
                     if detail_index < 0 or detail_index >= len(IMAGE_DETAIL_CHOICES):
@@ -1429,35 +1738,45 @@ class UIMixin:
 
                     with ui.HStack(height=25):
                         ui.Label("Step 1 Model:", width=180)
-                        self._ai_step1_model_combo = ui.ComboBox(step1_index, *ADV_MODEL_CHOICES)
+                        self._ai_step1_model_combo = ui.ComboBox(
+                            step1_index, *ADV_MODEL_CHOICES
+                        )
                         self._ai_step1_model_combo.model.get_item_value_model().add_value_changed_fn(
                             lambda m: self._save_settings_to_json()
                         )
 
                     with ui.HStack(height=25):
                         ui.Label("Step 2 Model:", width=180)
-                        self._ai_step2_model_combo = ui.ComboBox(step2_index, *ADV_MODEL_CHOICES)
+                        self._ai_step2_model_combo = ui.ComboBox(
+                            step2_index, *ADV_MODEL_CHOICES
+                        )
                         self._ai_step2_model_combo.model.get_item_value_model().add_value_changed_fn(
                             lambda m: self._save_settings_to_json()
                         )
 
                     with ui.HStack(height=25):
                         ui.Label("Reasoning Effort:", width=180)
-                        self._ai_reasoning_effort_combo = ui.ComboBox(effort_index, *REASONING_EFFORT_CHOICES)
+                        self._ai_reasoning_effort_combo = ui.ComboBox(
+                            effort_index, *REASONING_EFFORT_CHOICES
+                        )
                         self._ai_reasoning_effort_combo.model.get_item_value_model().add_value_changed_fn(
                             lambda m: self._save_settings_to_json()
                         )
 
                     with ui.HStack(height=25):
                         ui.Label("Text Verbosity:", width=180)
-                        self._ai_text_verbosity_combo = ui.ComboBox(verbosity_index, *TEXT_VERBOSITY_CHOICES)
+                        self._ai_text_verbosity_combo = ui.ComboBox(
+                            verbosity_index, *TEXT_VERBOSITY_CHOICES
+                        )
                         self._ai_text_verbosity_combo.model.get_item_value_model().add_value_changed_fn(
                             lambda m: self._save_settings_to_json()
                         )
 
                     with ui.HStack(height=25):
                         ui.Label("Image Detail:", width=180)
-                        self._ai_image_detail_combo = ui.ComboBox(detail_index, *IMAGE_DETAIL_CHOICES)
+                        self._ai_image_detail_combo = ui.ComboBox(
+                            detail_index, *IMAGE_DETAIL_CHOICES
+                        )
                         self._ai_image_detail_combo.model.get_item_value_model().add_value_changed_fn(
                             lambda m: self._save_settings_to_json()
                         )
@@ -1484,7 +1803,9 @@ class UIMixin:
                         )
 
                     ui.Spacer(height=8)
-                    ui.Button("Close", clicked_fn=self._close_ai_settings_window, width=120)
+                    ui.Button(
+                        "Close", clicked_fn=self._close_ai_settings_window, width=120
+                    )
 
     def _close_ai_settings_window(self):
         if not self._ai_settings_window:
@@ -1504,13 +1825,23 @@ class UIMixin:
         show_replace_candidates: bool = False,
     ):
         ui.Separator()
-        ui.Label("Asset Orientation Offset (per asset_url)")
+        ui.Label("Asset Orientation Offset (per asset URL)")
         with ui.HStack(height=25, width=ui.Fraction(1)):
-            ui.Button("Use Selected Prim", clicked_fn=self._on_use_selected_prim_click, width=150)
-            ui.StringField(model=self._asset_url_model, read_only=True, width=ui.Fraction(1))
+            ui.Button(
+                "Use Selected Prim",
+                clicked_fn=self._on_use_selected_prim_click,
+                width=150,
+            )
+            ui.StringField(
+                model=self._asset_url_model, read_only=True, width=ui.Fraction(1)
+            )
         if show_attach:
             with ui.HStack(height=25):
-                ui.Button("Attach Metadata", clicked_fn=self._on_attach_metadata_selected_prim_click, width=150)
+                ui.Button(
+                    "Attach Metadata",
+                    clicked_fn=self._on_attach_metadata_selected_prim_click,
+                    width=150,
+                )
                 ui.Label("Attach placement metadata to selected prim", width=0)
         with ui.HStack(height=25):
             ui.Label("Rotation Offset (deg):", width=150)
@@ -1518,11 +1849,19 @@ class UIMixin:
         with ui.HStack(height=25):
             ui.Button("-90", clicked_fn=lambda: self._nudge_asset_offset(-90), width=60)
             ui.Button("+90", clicked_fn=lambda: self._nudge_asset_offset(90), width=60)
-            ui.Button("+180", clicked_fn=lambda: self._nudge_asset_offset(180), width=70)
-            ui.Button("Save & Apply", clicked_fn=self._on_save_asset_offset_click, width=120)
+            ui.Button(
+                "+180", clicked_fn=lambda: self._nudge_asset_offset(180), width=70
+            )
+            ui.Button(
+                "Save & Apply", clicked_fn=self._on_save_asset_offset_click, width=120
+            )
 
         with ui.HStack(height=25):
-            ui.Button("Replace Only", clicked_fn=self._on_replace_selected_asset_click, width=150)
+            ui.Button(
+                "Replace Only",
+                clicked_fn=self._on_replace_selected_asset_click,
+                width=150,
+            )
             ui.Label("Replace without blacklist", width=0)
 
         if show_replace_candidates:
@@ -1535,7 +1874,11 @@ class UIMixin:
                 ui.Label("Browse ranked replacements with thumbnails", width=0)
 
         with ui.HStack(height=25):
-            ui.Button("Blacklist & Replace", clicked_fn=self._on_blacklist_selected_asset_click, width=150)
+            ui.Button(
+                "Blacklist & Replace",
+                clicked_fn=self._on_blacklist_selected_asset_click,
+                width=150,
+            )
             self._blacklist_count_label = ui.Label("Blacklisted: 0", width=0)
             ui.Button("Manage...", clicked_fn=self._open_blacklist_window, width=90)
         self._update_blacklist_label()

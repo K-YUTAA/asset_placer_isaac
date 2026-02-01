@@ -40,19 +40,27 @@ from ..procedural import DoorDetector, FloorGenerator, WallGenerator
 # `my.research.asset_placer.some_public_function(x)`
 def some_public_function(x: int):
     """This is a public function that can be called from other extensions."""
-    omni.log.info(f"[my.research.asset_placer] some_public_function was called with {x}")
+    omni.log.info(
+        f"[my.research.asset_placer] some_public_function was called with {x}"
+    )
     return x**x
 
 
-class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMixin, omni.ext.IExt):
+class MyExtension(
+    SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMixin, omni.ext.IExt
+):
     """USD Search Placer Extension with Tabbed UI."""
 
     def on_startup(self, _ext_id):
         omni.log.info("[my.research.asset_placer] Extension startup")
 
         # --- 設定ファイルのパス ---
-        self._extension_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self._settings_file = os.path.join(self._extension_dir, "extension_settings.json")
+        self._extension_dir = os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__))
+        )
+        self._settings_file = os.path.join(
+            self._extension_dir, "extension_settings.json"
+        )
 
         # --- JSONファイルから設定を読み込む ---
         saved_settings = self._load_settings_from_json()
@@ -74,11 +82,16 @@ class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMix
         if saved_key:
             omni.log.info("OpenAI API Key loaded from extension_settings.json")
         elif env_api_key:
-            omni.log.info("OpenAI API Key loaded from OPENAI_API_KEY environment variable")
+            omni.log.info(
+                "OpenAI API Key loaded from OPENAI_API_KEY environment variable"
+            )
 
         # --- Search Root URLの永続化（JSONファイル使用） ---
         self._search_root_model = ui.SimpleStringModel(
-            saved_settings.get("search_root_url", "omniverse://192.168.11.65/Users/tsukuba1/MyAssets/Office/")
+            saved_settings.get(
+                "search_root_url",
+                "omniverse://192.168.11.65/Users/tsukuba1/MyAssets/Office/",
+            )
         )
         self._search_root_model.add_value_changed_fn(
             lambda m: self._save_settings_to_json()
@@ -93,12 +106,16 @@ class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMix
         self._saved_model_index = saved_settings.get("model_index", 0)
         self._ai_step1_model_index = saved_settings.get("ai_step1_model_index", 0)
         self._ai_step2_model_index = saved_settings.get("ai_step2_model_index", 0)
-        self._ai_reasoning_effort_index = saved_settings.get("ai_reasoning_effort_index", 0)
+        self._ai_reasoning_effort_index = saved_settings.get(
+            "ai_reasoning_effort_index", 0
+        )
         self._ai_text_verbosity_index = saved_settings.get("ai_text_verbosity_index", 0)
         self._ai_image_detail_index = saved_settings.get("ai_image_detail_index", 0)
         self._ai_max_output_tokens = saved_settings.get("ai_max_output_tokens", 16000)
         self._ai_settings_window = None
-        self._ai_max_output_tokens_model = ui.SimpleStringModel(str(self._ai_max_output_tokens))
+        self._ai_max_output_tokens_model = ui.SimpleStringModel(
+            str(self._ai_max_output_tokens)
+        )
         self._ai_max_retries = saved_settings.get("ai_max_retries", 1)
         self._ai_retry_delay_sec = saved_settings.get("ai_retry_delay_sec", 1.0)
         self._ai_max_retries_model = ui.SimpleStringModel(str(self._ai_max_retries))
@@ -111,7 +128,9 @@ class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMix
         self._auto_layout_task: Optional[asyncio.Task] = None
 
         # --- Asset rotation offset cache (per asset_url) ---
-        self._rotation_offsets_file = os.path.join(self._extension_dir, "asset_rotation_offsets.json")
+        self._rotation_offsets_file = os.path.join(
+            self._extension_dir, "asset_rotation_offsets.json"
+        )
         self._asset_rotation_offsets = self._load_rotation_offsets()
         self._asset_url_model = ui.SimpleStringModel("")
         self._asset_offset_model = ui.SimpleStringModel("0")
@@ -122,9 +141,7 @@ class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMix
         if not isinstance(raw_blacklist, (list, tuple, set)):
             raw_blacklist = []
         self._asset_blacklist = {
-            self._normalize_asset_url(str(url))
-            for url in raw_blacklist
-            if url
+            self._normalize_asset_url(str(url)) for url in raw_blacklist if url
         }
         raw_blacklist_keys = saved_settings.get("asset_blacklist_keys", [])
         if isinstance(raw_blacklist_keys, (str, bytes)):
@@ -205,7 +222,7 @@ class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMix
         self._replacement_query = ""
 
         # --- 承認ワークフロー用の状態管理 ---
-        self._require_approval = ui.SimpleBoolModel(True)  # 承認ステップを挟むかどうか
+        self._require_approval = ui.SimpleBoolModel(False)  # 承認ステップを挟むかどうか
         self._analysis_result = None  # Step 1の分析結果を保持
         self._approval_pending = False  # 承認待ち状態
         self._additional_context = ""  # 拒否時の追加コンテキスト
@@ -224,18 +241,16 @@ class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMix
 
         # --- 手続き的生成モジュールの初期化 ---
         self._door_detector = DoorDetector(
-            self._extract_float,
-            self._extract_optional_float
+            self._extract_float, self._extract_optional_float
         )
         self._floor_generator = FloorGenerator(
-            self._extract_float,
-            self._get_unique_child_path
+            self._extract_float, self._get_unique_child_path
         )
         self._wall_generator = WallGenerator(
             self._extract_float,
             self._extract_optional_float,
             self._get_unique_child_path,
-            self._door_detector
+            self._door_detector,
         )
 
         # --- ウィンドウの作成 ---
@@ -246,8 +261,12 @@ class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMix
             with ui.VStack(spacing=5):
                 # タブボタン
                 with ui.HStack(height=30):
-                    self._tab_btn_generate = ui.Button("Generate from Image", clicked_fn=lambda: self._switch_tab(0))
-                    self._tab_btn_details = ui.Button("Details", clicked_fn=lambda: self._switch_tab(1))
+                    self._tab_btn_generate = ui.Button(
+                        "Generate from Image", clicked_fn=lambda: self._switch_tab(0)
+                    )
+                    self._tab_btn_details = ui.Button(
+                        "Details", clicked_fn=lambda: self._switch_tab(1)
+                    )
 
                 ui.Separator()
 
@@ -271,10 +290,13 @@ class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMix
             return
         settings.set("/app/viewport/grid/enabled", True)
         settings.set("/persistent/app/viewport/grid/enabled", True)
-        settings.set("/exts/omni.kit.viewport.menubar.lighting/defaultRig", "Grey_Studio")
+        settings.set(
+            "/exts/omni.kit.viewport.menubar.lighting/defaultRig", "Grey_Studio"
+        )
 
         try:
             import omni.kit.actions.core
+
             action_registry = omni.kit.actions.core.get_action_registry()
             action_registry.execute_action(
                 "omni.kit.viewport.menubar.lighting",
