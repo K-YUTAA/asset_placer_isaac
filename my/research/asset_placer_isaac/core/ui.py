@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES.
+﻿# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: LicenseRef-NvidiaProprietary
 #
@@ -39,15 +39,15 @@ SEARCH_TEST_THUMB_SIZE = 96
 class UIMixin:
     def _setup_japanese_font(self) -> Dict[str, str]:
         """
-        日本語フォントを設定する
+        譌･譛ｬ隱槭ヵ繧ｩ繝ｳ繝医ｒ險ｭ螳壹☆繧・
 
-        Omniverse Kit では、フォントマネージャーへの登録は不要。
-        スタイル辞書に直接フォントファイルパスを指定すれば動作する。
+        Omniverse Kit 縺ｧ縺ｯ縲√ヵ繧ｩ繝ｳ繝医・繝阪・繧ｸ繝｣繝ｼ縺ｸ縺ｮ逋ｻ骭ｲ縺ｯ荳崎ｦ√・
+        繧ｹ繧ｿ繧､繝ｫ霎樊嶌縺ｫ逶ｴ謗･繝輔か繝ｳ繝医ヵ繧｡繧､繝ｫ繝代せ繧呈欠螳壹☆繧後・蜍穂ｽ懊☆繧九・
         """
         try:
-            omni.log.info("=== 日本語フォントの設定を開始 ===")
+            omni.log.info("=== 譌･譛ｬ隱槭ヵ繧ｩ繝ｳ繝医・險ｭ螳壹ｒ髢句ｧ・===")
 
-            # Windows標準の日本語フォントリスト（優先順）
+            # Windows讓呎ｺ悶・譌･譛ｬ隱槭ヵ繧ｩ繝ｳ繝医Μ繧ｹ繝茨ｼ亥━蜈磯・ｼ・
             japanese_fonts = [
                 ("MS Gothic", "C:/Windows/Fonts/msgothic.ttc"),
                 ("Yu Gothic", "C:/Windows/Fonts/YuGothM.ttc"),
@@ -55,34 +55,34 @@ class UIMixin:
             ]
 
             for font_name, font_path in japanese_fonts:
-                # ファイルの存在確認
+                # 繝輔ぃ繧､繝ｫ縺ｮ蟄伜惠遒ｺ隱・
                 if not os.path.exists(font_path):
-                    omni.log.warn(f"フォントファイルが見つかりません: {font_path}")
+                    omni.log.warn(f"繝輔か繝ｳ繝医ヵ繧｡繧､繝ｫ縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ: {font_path}")
                     continue
 
-                # ファイルが存在する場合、そのパスをスタイルとして返す
-                omni.log.info(f"✓ 日本語フォント '{font_name}' を使用")
-                omni.log.info(f"  パス: {font_path}")
+                # 繝輔ぃ繧､繝ｫ縺悟ｭ伜惠縺吶ｋ蝣ｴ蜷医√◎縺ｮ繝代せ繧偵せ繧ｿ繧､繝ｫ縺ｨ縺励※霑斐☆
+                omni.log.info(f"笨・譌･譛ｬ隱槭ヵ繧ｩ繝ｳ繝・'{font_name}' 繧剃ｽｿ逕ｨ")
+                omni.log.info(f"  繝代せ: {font_path}")
 
-                # omni.ui.StringField の style プロパティに渡すスタイル辞書
-                # "Font" キー（大文字のF）にファイルパスを指定
+                # omni.ui.StringField 縺ｮ style 繝励Ο繝代ユ繧｣縺ｫ貂｡縺吶せ繧ｿ繧､繝ｫ霎樊嶌
+                # "Font" 繧ｭ繝ｼ・亥､ｧ譁・ｭ励・F・峨↓繝輔ぃ繧､繝ｫ繝代せ繧呈欠螳・
                 style = {
                     "Font": font_path,
                     "font_size": 14
                 }
 
-                omni.log.info("✓ フォントスタイル設定完了")
+                omni.log.info("笨・繝輔か繝ｳ繝医せ繧ｿ繧､繝ｫ險ｭ螳壼ｮ御ｺ・")
                 return style
 
-            # すべてのフォントが見つからなかった場合
-            omni.log.warn("⚠ 日本語フォントが見つかりませんでした")
-            omni.log.warn("  デフォルトフォントを使用します（日本語が文字化けする可能性があります）")
+            # 縺吶∋縺ｦ縺ｮ繝輔か繝ｳ繝医′隕九▽縺九ｉ縺ｪ縺九▲縺溷ｴ蜷・
+            omni.log.warn("笞 譌･譛ｬ隱槭ヵ繧ｩ繝ｳ繝医′隕九▽縺九ｊ縺ｾ縺帙ｓ縺ｧ縺励◆")
+            omni.log.warn("  繝・ヵ繧ｩ繝ｫ繝医ヵ繧ｩ繝ｳ繝医ｒ菴ｿ逕ｨ縺励∪縺呻ｼ域律譛ｬ隱槭′譁・ｭ怜喧縺代☆繧句庄閭ｽ諤ｧ縺後≠繧翫∪縺呻ｼ・")
             return {}
 
         except Exception as e:
-            omni.log.error(f"✗ 日本語フォント設定中にエラーが発生: {e}")
+            omni.log.error(f"笨・譌･譛ｬ隱槭ヵ繧ｩ繝ｳ繝郁ｨｭ螳壻ｸｭ縺ｫ繧ｨ繝ｩ繝ｼ縺檎匱逕・ {e}")
             import traceback
-            omni.log.error(f"スタックトレース:\n{traceback.format_exc()}")
+            omni.log.error(f"繧ｹ繧ｿ繝・け繝医Ξ繝ｼ繧ｹ:\n{traceback.format_exc()}")
             return {}
 
     def _deferred_destroy_window(self, window) -> None:
@@ -192,7 +192,7 @@ class UIMixin:
     def _resize_blacklist_window(self):
         if not self._blacklist_window or not self._blacklist_scrolling_frame:
             return
-        # Header + separator + margins の分を引いた残りをスクロール領域に充てる
+        # Header + separator + margins 縺ｮ蛻・ｒ蠑輔＞縺滓ｮ九ｊ繧偵せ繧ｯ繝ｭ繝ｼ繝ｫ鬆伜沺縺ｫ蜈・※繧・
         header_offset = 90
         width_margin = 20
         height = max(120, int(self._blacklist_window.height - header_offset))
@@ -366,7 +366,7 @@ class UIMixin:
 
     def _refresh_loaded_json_preview_model(self) -> None:
         if not self._loaded_json_path:
-            self._loaded_json_preview_model.set_value("No loaded JSON selected.")
+            self._loaded_json_preview_model.set_value("No selected JSON.")
             return
         if not os.path.exists(self._loaded_json_path):
             self._loaded_json_preview_model.set_value(f"File not found: {self._loaded_json_path}")
@@ -385,7 +385,7 @@ class UIMixin:
 
     def _open_loaded_json_preview_window(self):
         if not self._loaded_json_path:
-            omni.log.warn("No loaded JSON selected for preview.")
+            omni.log.warn("No selected JSON for preview.")
             return
 
         if self._loaded_json_preview_window:
@@ -393,7 +393,7 @@ class UIMixin:
             self._loaded_json_preview_window = None
             self._deferred_destroy_window(existing)
 
-        self._loaded_json_preview_window = ui.Window("Loaded JSON Preview", width=620, height=720)
+        self._loaded_json_preview_window = ui.Window("Selected JSON Preview", width=620, height=720)
         with self._loaded_json_preview_window.frame:
             with ui.VStack(spacing=8, style={"margin": 10}):
                 ui.Label(f"Source: {self._loaded_json_path}")
@@ -418,7 +418,7 @@ class UIMixin:
 
     def _open_loaded_json_editor(self):
         if not self._loaded_json_path or not os.path.exists(self._loaded_json_path):
-            omni.log.warn("No loaded JSON selected for editing.")
+            omni.log.warn("No selected JSON for editing.")
             return
         self._open_json_editor_window()
         self._json_editor_selected_path = self._loaded_json_path
@@ -773,8 +773,8 @@ class UIMixin:
         max_limit: int = 200,
     ) -> List[Dict[str, object]]:
         """
-        テスト用: ベクター検索でサムネイル付きの結果一覧を取得する。
-        ブラックリスト/同一性キーでフィルタし、有効候補が target_valid 件に達するまで再検索する。
+        繝・せ繝育畑: 繝吶け繧ｿ繝ｼ讀懃ｴ｢縺ｧ繧ｵ繝繝阪う繝ｫ莉倥″縺ｮ邨先棡荳隕ｧ繧貞叙蠕励☆繧九・
+        繝悶Λ繝・け繝ｪ繧ｹ繝・蜷御ｸ諤ｧ繧ｭ繝ｼ縺ｧ繝輔ぅ繝ｫ繧ｿ縺励∵怏蜉ｹ蛟呵｣懊′ target_valid 莉ｶ縺ｫ驕斐☆繧九∪縺ｧ蜀肴､懃ｴ｢縺吶ｋ縲・
         """
         import requests
         import json
@@ -1242,7 +1242,7 @@ class UIMixin:
         self._replacement_results_frame.rebuild()
 
     def _switch_tab(self, tab_index: int):
-        """タブを切り替える"""
+        """繧ｿ繝悶ｒ蛻・ｊ譖ｿ縺医ｋ"""
         self._active_tab = tab_index
         self._ai_status_label = None
         self._ai_tokens_label = None
@@ -1253,62 +1253,66 @@ class UIMixin:
             self._build_tab_content()
 
     def _build_tab_content(self):
-        """現在のアクティブタブのコンテンツを構築する"""
+        """迴ｾ蝨ｨ縺ｮ繧｢繧ｯ繝・ぅ繝悶ち繝悶・繧ｳ繝ｳ繝・Φ繝・ｒ讒狗ｯ峨☆繧・"""
         if self._active_tab == 0:
-            # タブ 1: "Generate from Image"
+            # 繧ｿ繝・1: "Generate from Image"
             with ui.VStack(spacing=5, height=0):
-                ui.Label("Step 1: Select inputs and generate JSON using AI.")
+                ui.Label("Inputs")
 
-                # 画像ファイル選択
-                with ui.HStack(height=25):
-                    ui.Button("Select Image File...", clicked_fn=self._on_select_image_click, width=150)
-                    image_label_text = os.path.basename(self._image_path) if self._image_path else "No file selected"
-                    self._image_label = ui.Label(image_label_text, width=0)
+                # 逕ｻ蜒上/蟇ｸ豕輔ヵ繧｡繧､繝ｫ驕ｸ謚・
+                with ui.HStack(height=25, spacing=12):
+                    with ui.HStack(width=ui.Fraction(1), spacing=6):
+                        ui.Button("Select Image File...", clicked_fn=self._on_select_image_click, width=150)
+                        image_label_text = os.path.basename(self._image_path) if self._image_path else "No file selected"
+                        self._image_label = ui.Label(image_label_text, width=0)
+                    with ui.HStack(width=ui.Fraction(1), spacing=6):
+                        ui.Button("Select Dimensions File...", clicked_fn=self._on_select_dims_click, width=170)
+                        dims_label_text = (
+                            os.path.basename(self._dimensions_path) if self._dimensions_path else "No file selected"
+                        )
+                        self._dims_label = ui.Label(dims_label_text, width=0)
 
-                # 寸法ファイル選択
-                with ui.HStack(height=25):
-                    ui.Button("Select Dimensions File...", clicked_fn=self._on_select_dims_click, width=150)
-                    dims_label_text = (
-                        os.path.basename(self._dimensions_path) if self._dimensions_path else "No file selected"
-                    )
-                    self._dims_label = ui.Label(dims_label_text, width=0)
-
-                # プロンプト1選択（オプション）
-                with ui.HStack(height=25):
-                    ui.Button("Select Prompt 1 (optional)...", clicked_fn=self._on_select_prompt1_click, width=150)
-                    prompt1_label_text = os.path.basename(self._prompt1_path) if self._prompt1_path else "Using default"
-                    self._prompt1_label = ui.Label(prompt1_label_text, width=0)
-
-                # プロンプト2選択（オプション）
-                with ui.HStack(height=25):
-                    ui.Button("Select Prompt 2 (optional)...", clicked_fn=self._on_select_prompt2_click, width=150)
-                    prompt2_label_text = os.path.basename(self._prompt2_path) if self._prompt2_path else "Using default"
-                    self._prompt2_label = ui.Label(prompt2_label_text, width=0)
+                # 繝励Ο繝ｳ繝励ヨ驕ｸ謚橸ｼ医が繝励す繝ｧ繝ｳ・・
+                with ui.HStack(height=25, spacing=12):
+                    with ui.HStack(width=ui.Fraction(1), spacing=6):
+                        ui.Button("Select Prompt 1 (optional)...", clicked_fn=self._on_select_prompt1_click, width=170)
+                        prompt1_label_text = (
+                            os.path.basename(self._prompt1_path) if self._prompt1_path else "Using default"
+                        )
+                        self._prompt1_label = ui.Label(prompt1_label_text, width=0)
+                    with ui.HStack(width=ui.Fraction(1), spacing=6):
+                        ui.Button("Select Prompt 2 (optional)...", clicked_fn=self._on_select_prompt2_click, width=170)
+                        prompt2_label_text = (
+                            os.path.basename(self._prompt2_path) if self._prompt2_path else "Using default"
+                        )
+                        self._prompt2_label = ui.Label(prompt2_label_text, width=0)
 
                 with ui.HStack(height=25):
-                    ui.Button("Open Preview...", clicked_fn=self._open_preview_window, width=150)
+                    ui.Button("Preview Inputs...", clicked_fn=self._open_preview_window, width=150)
                     ui.Label("Preview selected image/prompts/dimensions", width=0)
 
-                ui.Spacer(height=10)
+                ui.Spacer(height=8)
+                ui.Separator()
+                ui.Label("AI Generation & Search")
 
-                # モデル選択
-                # インデックスの範囲チェック（MODEL_CHOICESの範囲内）
+                # 繝｢繝・Ν驕ｸ謚・
+                # 繧､繝ｳ繝・ャ繧ｯ繧ｹ縺ｮ遽・峇繝√ぉ繝・け・・ODEL_CHOICES縺ｮ遽・峇蜀・ｼ・
                 model_index = self._saved_model_index if 0 <= self._saved_model_index < len(MODEL_CHOICES) else 0
                 with ui.HStack(height=25):
                     ui.Label("AI Model:", width=150)
                     self._model_combo = ui.ComboBox(model_index, *MODEL_CHOICES)
-                    # モデル変更時にJSONファイルに保存
+                    # 繝｢繝・Ν螟画峩譎ゅ↓JSON繝輔ぃ繧､繝ｫ縺ｫ菫晏ｭ・
                     self._model_combo.model.get_item_value_model().add_value_changed_fn(
                         lambda m: self._save_settings_to_json()
                     )
                     ui.Button("AI Settings...", clicked_fn=self._open_ai_settings_window, width=120)
 
-                # APIキー入力
+                # API繧ｭ繝ｼ蜈･蜉・
                 with ui.HStack(height=25):
                     ui.Label("OpenAI API Key:", width=150)
                     ui.StringField(model=self._api_key_model, password_mode=True)
 
-                # USD Search ルート
+                # USD Search 繝ｫ繝ｼ繝・
                 with ui.HStack(height=25):
                     ui.Label("Search Root URL:", width=150)
                     ui.StringField(model=self._search_root_model)
@@ -1317,16 +1321,19 @@ class UIMixin:
                     ui.Button("Search Tester...", clicked_fn=self._open_search_test_window, width=150)
                     ui.Label("Search preview", width=0)
 
-                self._build_asset_orientation_section(show_attach=False, show_replace_candidates=True)
+                self._build_asset_orientation_section(show_attach=True, show_replace_candidates=True)
 
                 ui.Spacer(height=10)
 
-                # 承認ワークフローのチェックボックス
-                with ui.HStack(height=25):
+                with ui.HStack(height=26):
+                    self._generate_button = ui.Button(
+                        "Generate JSON & Scene (AI)",
+                        clicked_fn=self._on_generate_json_click,
+                        width=220,
+                        height=26,
+                    )
                     ui.CheckBox(model=self._require_approval, width=20)
-                    ui.Label("Require approval after image analysis")
-
-                self._generate_button = ui.Button("Generate JSON (AI)", clicked_fn=self._on_generate_json_click, height=30)
+                    ui.Label("Require approval after image analysis", width=0)
                 with ui.HStack(height=24):
                     self._cancel_ai_button = ui.Button("Cancel AI", clicked_fn=self._on_cancel_ai_click, width=120, height=24)
                     self._cancel_ai_button.visible = False
@@ -1335,69 +1342,66 @@ class UIMixin:
                 with ui.HStack(height=20):
                     tokens_text = getattr(self, "_ai_tokens_text", "Tokens: -")
                     self._ai_tokens_label = ui.Label(tokens_text, width=0)
+                ui.Separator()
+                ui.Label("JSON Files")
+                ui.Label("Generated JSON")
                 with ui.HStack(height=25):
-                    ui.Button("Preview Generated JSON", clicked_fn=self._open_generated_json_preview_window, width=170)
+                    ui.Button("Preview Generated JSON...", clicked_fn=self._open_generated_json_preview_window, width=190)
                     label_text = (
                         f"Latest JSON: {os.path.basename(self._generated_json_path)}"
                         if self._generated_json_path
                         else "Latest JSON: None"
                     )
                     self._generated_json_label = ui.Label(label_text, width=0)
+
+                ui.Spacer(height=6)
+                ui.Label("Selected JSON")
                 with ui.HStack(height=25):
-                    ui.Button("Load JSON File...", clicked_fn=self._on_load_json_click, width=170)
+                    ui.Button("Select JSON File...", clicked_fn=self._on_load_json_click, width=190)
                     loaded_label_text = (
-                        f"Loaded JSON: {os.path.basename(self._loaded_json_path)}"
+                        f"Selected JSON: {os.path.basename(self._loaded_json_path)}"
                         if self._loaded_json_path
-                        else "Loaded JSON: None"
+                        else "Selected JSON: None"
                     )
                     self._loaded_json_label = ui.Label(loaded_label_text, width=0)
                 with ui.HStack(height=26):
                     ui.Button("Preview Selected JSON...", clicked_fn=self._open_loaded_json_preview_window, width=190)
                     ui.Button("Edit Selected JSON...", clicked_fn=self._open_loaded_json_editor, width=190)
-                    ui.Label("Preview/edit the JSON chosen via Load JSON File", width=0)
+                    ui.Label("Preview or edit selected JSON", width=0)
+                ui.Spacer(height=4)
+                ui.Label("Placement (Selected JSON)")
                 with ui.HStack(height=25):
-                    ui.Button("Edit JSON...", clicked_fn=self._open_json_editor_window, width=170)
-                    ui.Label("Edit search_prompt per asset", width=0)
+                    ui.Button("Generate Scene from JSON", clicked_fn=self._on_generate_from_json_click, width=190)
+                    ui.Label("Generate scene using selected JSON", width=0)
+                with ui.HStack(height=25):
+                    ui.Button("Place BBoxes from JSON (Debug)", clicked_fn=self._on_place_bbox_from_json_click, width=190)
+                    ui.Label("Place debug bboxes using selected JSON", width=0)
 
                 ui.Spacer(height=10)
 
-                # --- LLM分析結果表示欄 ---
+                # --- LLM蛻・梵邨先棡陦ｨ遉ｺ谺・---
                 ui.Label("AI Analysis Result:")
                 self._analysis_text_field = ui.StringField(
                     model=self._analysis_text_model,
                     multiline=True,
                     read_only=True,
                     height=300,
-                    style=self._japanese_font_style  # 日本語フォント適用
+                    style=self._japanese_font_style  # 譌･譛ｬ隱槭ヵ繧ｩ繝ｳ繝磯←逕ｨ
                 )
 
                 ui.Spacer(height=5)
-                ui.Spacer()  # ボタンエリアを下部に固定
+                ui.Spacer()  # 繝懊ち繝ｳ繧ｨ繝ｪ繧｢繧剃ｸ矩Κ縺ｫ蝗ｺ螳・
                 ui.Separator()
 
-                # 承認/拒否ボタン（最初は非表示）
+                # 謇ｿ隱・諡貞凄繝懊ち繝ｳ・域怙蛻昴・髱櫁｡ｨ遉ｺ・・
                 with ui.HStack(height=34, visible=False) as self._approval_buttons_container:
-                    ui.Button("✓ Approve & Continue", clicked_fn=self._on_approve_click, width=0, height=30)
+                    ui.Button("笨・Approve & Continue", clicked_fn=self._on_approve_click, width=0, height=30)
                     ui.Spacer(width=10)
-                    ui.Button("✗ Reject & Add Context", clicked_fn=self._on_reject_click, width=0, height=30)
+                    ui.Button("笨・Reject & Add Context", clicked_fn=self._on_reject_click, width=0, height=30)
 
                 ui.Spacer(height=5)
 
-        elif self._active_tab == 1:
-            # Tab 2: "Details"
-            with ui.VStack(spacing=5, height=0):
-                ui.Label("Details")
-                ui.Separator()
-                ui.Label("Metadata / Advanced")
-                with ui.HStack(height=25):
-                    ui.Button("Attach Metadata", clicked_fn=self._on_attach_metadata_selected_prim_click, width=150)
-                    ui.Label("Attach placement metadata to selected prim", width=0)
-
-                ui.Spacer(height=8)
-                self._build_asset_orientation_section(show_attach=False, show_replace_candidates=True)
-                ui.Spacer()
-
-    # --- "Load from File" タブのコールバック ---
+    # --- "Load from File" 繧ｿ繝悶・繧ｳ繝ｼ繝ｫ繝舌ャ繧ｯ ---
 
     def _open_ai_settings_window(self):
         if self._ai_settings_window:
@@ -1539,3 +1543,4 @@ class UIMixin:
             self._blacklist_count_label = ui.Label("Blacklisted: 0", width=0)
             ui.Button("Manage...", clicked_fn=self._open_blacklist_window, width=90)
         self._update_blacklist_label()
+

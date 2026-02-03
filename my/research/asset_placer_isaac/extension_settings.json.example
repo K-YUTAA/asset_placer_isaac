@@ -18,6 +18,7 @@
     "auto_layout_enabled": true,
     "auto_layout_mode": "quick",
     "auto_layout_file": "",
+    "debug_bbox_mode": false,
     "asset_blacklist": [],
     "asset_blacklist_keys": []
 }

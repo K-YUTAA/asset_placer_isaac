@@ -535,6 +535,9 @@ class CommandsMixin:
         if self._search_task and not self._search_task.done():
             self._search_task.cancel()
 
+
+        # Debug bbox placement is triggered via a dedicated button.
+
         # レイアウトデータを非同期タスク用にコピー
         layout_copy = json.loads(json.dumps(layout_data))
         self._search_task = asyncio.ensure_future(self._search_and_place_assets(layout_copy))
@@ -794,6 +797,167 @@ class CommandsMixin:
             omni.log.error(f"Unexpected error during USD Search placement: {exc}")
         finally:
             self._search_task = None
+
+    
+    async def _place_debug_bboxes(self, layout_data) -> None:
+        """Place cubes representing JSON bounding boxes (debug mode)."""
+        placed = 0
+        skipped = 0
+
+        try:
+            stage = omni.usd.get_context().get_stage()
+            if stage is None:
+                omni.log.error("No USD stage is available. Open or create a stage before placing debug boxes.")
+                return
+
+            area_name = layout_data.get("area_name") if isinstance(layout_data, dict) else None
+            root_prim_path = self._get_or_create_root_prim(stage, area_name)
+
+            objects = self._extract_layout_objects(layout_data)
+            if not objects:
+                omni.log.warn("Layout data does not contain placeable objects for debug bbox placement.")
+                return
+
+            omni.log.info(f"[DebugBBox] Placing {len(objects)} bounding boxes...")
+
+            for index, obj in enumerate(objects):
+                name = str(obj.get("object_name", "") or "").strip()
+                if not name:
+                    name = f"Object_{index + 1}"
+
+                prim_path = self._create_debug_bbox(stage, root_prim_path, name, obj)
+                if prim_path:
+                    placed += 1
+                else:
+                    skipped += 1
+
+                await asyncio.sleep(0)
+
+            omni.log.info(f"[DebugBBox] Done. Placed={placed}, Skipped={skipped}")
+        except asyncio.CancelledError:
+            omni.log.warn("Debug bbox placement cancelled.")
+            raise
+        except Exception as exc:
+            omni.log.error(f"Debug bbox placement failed: {exc}")
+        finally:
+            self._search_task = None
+
+    def _create_debug_bbox(
+        self,
+        stage,
+        root_prim_path: str,
+        object_name: str,
+        object_data: Dict[str, object],
+    ) -> Optional[str]:
+        """Create a cube that represents the JSON bounding box (world-aligned)."""
+        try:
+            length = self._extract_float(object_data, "Length", 0.0)
+            width = self._extract_float(object_data, "Width", 0.0)
+            height = self._extract_float(object_data, "Height", 0.0)
+
+            if length <= 0.0 or width <= 0.0 or height <= 0.0:
+                omni.log.warn(
+                    f"[DebugBBox] Invalid size for '{object_name}': L={length}, W={width}, H={height}"
+                )
+                return None
+
+            x = self._extract_float(object_data, "X", 0.0)
+            y = self._extract_float(object_data, "Y", 0.0)
+            rotation = (
+                self._extract_optional_float_by_keys(
+                    object_data,
+                    [
+                        "rotationZ",
+                        "RotationZ",
+                        "rotation_z",
+                        "Rotation_Z",
+                        "rotation",
+                        "Rotation",
+                    ],
+                )
+                or 0.0
+            )
+
+            front_thickness = max(0.02, min(0.1, width * 0.1))
+
+            # Direction mapping: rotationZ=0 => +Y, 90 => +X, 180 => -Y, 270 => -X
+            theta = math.radians(rotation)
+            dir_x = math.sin(theta)
+            dir_y = math.cos(theta)
+
+            hx = length / 2.0
+            hy = width / 2.0
+            denom = 0.0
+            if hx > 1e-6:
+                denom = max(denom, abs(dir_x) / hx)
+            if hy > 1e-6:
+                denom = max(denom, abs(dir_y) / hy)
+            if denom <= 0.0:
+                boundary_x = 0.0
+                boundary_y = 0.0
+            else:
+                scale = 1.0 / denom
+                boundary_x = dir_x * scale
+                boundary_y = dir_y * scale
+
+            front_offset_x = boundary_x + dir_x * (front_thickness / 2.0)
+            front_offset_y = boundary_y + dir_y * (front_thickness / 2.0)
+
+            # Front plane rotation so that its local +Y aligns to the direction vector
+            if abs(dir_x) > 1e-6 or abs(dir_y) > 1e-6:
+                front_rotation = math.degrees(math.atan2(-dir_x, dir_y))
+            else:
+                front_rotation = 0.0
+
+            # Span of the front plane along the tangent direction
+            plane_span = length if abs(dir_y) >= abs(dir_x) else width
+
+            child_token = self._sanitize_identifier(
+                f"BBox_{object_name}" if object_name else "BBox"
+            )
+            root_path = self._get_unique_child_path(stage, root_prim_path, child_token)
+            root_xform = UsdGeom.Xform.Define(stage, Sdf.Path(root_path))
+
+            root_ops = UsdGeom.Xformable(root_xform)
+            # Interpret JSON coordinates in world space
+            try:
+                root_ops.SetResetXformStack(True)
+            except Exception:
+                pass
+            root_ops.AddTranslateOp().Set(Gf.Vec3d(x, y, 0.0))
+
+            body_path = f"{root_path}/Body"
+            body = UsdGeom.Cube.Define(stage, Sdf.Path(body_path))
+            body.GetSizeAttr().Set(1.0)
+            try:
+                body.CreateDisplayColorAttr().Set([(0.2, 0.7, 1.0)])
+                body.CreateDisplayOpacityAttr().Set([0.2])
+            except Exception:
+                pass
+
+            body_xform = UsdGeom.Xformable(body)
+            body_xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, height / 2.0))
+            body_xform.AddScaleOp().Set(Gf.Vec3f(length, width, height))
+
+            front_path = f"{root_path}/Front"
+            front = UsdGeom.Cube.Define(stage, Sdf.Path(front_path))
+            front.GetSizeAttr().Set(1.0)
+            try:
+                front.CreateDisplayColorAttr().Set([(1.0, 0.2, 0.2)])
+                front.CreateDisplayOpacityAttr().Set([0.6])
+            except Exception:
+                pass
+
+            front_xform = UsdGeom.Xformable(front)
+            front_xform.AddTranslateOp().Set(Gf.Vec3d(front_offset_x, front_offset_y, height / 2.0))
+            front_xform.AddRotateZOp().Set(front_rotation)
+            front_xform.AddScaleOp().Set(Gf.Vec3f(plane_span, front_thickness, height))
+
+            return root_path
+        except Exception as exc:
+            omni.log.error(f"[DebugBBox] Failed to create bbox for '{object_name}': {exc}")
+            return None
+
 
     async def _blacklist_and_replace_selected_asset(self, prim_path: str) -> None:
         await self._replace_selected_asset(prim_path, add_to_blacklist=True)
