@@ -1,0 +1,28 @@
+# === LAYOUT_HINTS (SAMPLE) ===
+# Use ASCII only. Lines starting with # are comments.
+# OUTLINE: RECT | L | U | IRREGULAR | UNKNOWN
+# SCALE_* are in meters. If unknown, omit them.
+# ROOMS uses fixed tokens. If ldk exists, living/dining/kitchen are ignored.
+# DOOR_COUNT / WINDOW_COUNT are optional. Use numbers if known.
+# WINDOW_HEIGHT_M and WINDOW_SILL_M are optional (meters). Defaults below.
+
+# LAYOUT_HINTS
+# すべての部屋種別を記載し、ない部屋は :0 とする
+OUTLINE=RECT
+SCALE_WIDTH_M=24
+SCALE_HEIGHT_M=10
+ROOMS=ldk:0,living:0,dining:0,kitchen:0,bedroom:0,kids_room:0,study:0,bathroom:0,toilet:0,washroom:0,closet:0,storage:0,hallway:0,entrance:0,garage:0,balcony:0,laundry:0,pantry:0,utility:0,office:0,guest_room:0
+DOOR_COUNT=12
+WINDOW_COUNT=6
+WINDOW_HEIGHT_M=1.2
+WINDOW_SILL_M=1.0
+
+# Single-room example
+# LAYOUT_HINTS
+# すべての部屋種別を記載し、ない部屋は :0 とする
+# OUTLINE=RECT
+# SCALE_WIDTH_M=6
+# SCALE_HEIGHT_M=4
+# ROOMS=bedroom:1
+# DOOR_COUNT=1
+# WINDOW_COUNT=1
