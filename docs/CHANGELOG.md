@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Split JSON loading from scene generation (separate "Select JSON" and "Generate Scene" actions)
 - Unified wording from "Loaded" to "Selected" JSON across UI
 - Removed tabbed UI; consolidated metadata/offset controls into the main view
+- Fixed placement pipeline indentation issue causing extension load failure
 
 ## [2026-01-29]
 

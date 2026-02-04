@@ -855,56 +855,56 @@ class CommandsMixin:
                         )
                         used_polygon_walls = False
 
-            if not used_polygon_walls:
-                area_size_x = layout_data.get("area_size_X")
-                area_size_y = layout_data.get("area_size_Y")
-                origin_mode = "center"
+                if not used_polygon_walls:
+                    area_size_x = layout_data.get("area_size_X")
+                    area_size_y = layout_data.get("area_size_Y")
+                    origin_mode = "center"
 
-                if isinstance(area_size_x, (int, float)) and isinstance(area_size_y, (int, float)):
-                    # Heuristic: if all object coords are inside [0, size], treat origin as bottom-left.
-                    try:
-                        xs = [float(obj.get("X")) for obj in objects if obj.get("X") is not None]
-                        ys = [float(obj.get("Y")) for obj in objects if obj.get("Y") is not None]
-                        if xs and ys:
-                            min_x, max_x = min(xs), max(xs)
-                            min_y, max_y = min(ys), max(ys)
-                            tol = 1e-3
-                            if (
-                                min_x >= -tol
-                                and min_y >= -tol
-                                and max_x <= float(area_size_x) + tol
-                                and max_y <= float(area_size_y) + tol
-                            ):
-                                origin_mode = "bottom_left"
-                    except Exception:
-                        origin_mode = "center"
+                    if isinstance(area_size_x, (int, float)) and isinstance(area_size_y, (int, float)):
+                        # Heuristic: if all object coords are inside [0, size], treat origin as bottom-left.
+                        try:
+                            xs = [float(obj.get("X")) for obj in objects if obj.get("X") is not None]
+                            ys = [float(obj.get("Y")) for obj in objects if obj.get("Y") is not None]
+                            if xs and ys:
+                                min_x, max_x = min(xs), max(xs)
+                                min_y, max_y = min(ys), max(ys)
+                                tol = 1e-3
+                                if (
+                                    min_x >= -tol
+                                    and min_y >= -tol
+                                    and max_x <= float(area_size_x) + tol
+                                    and max_y <= float(area_size_y) + tol
+                                ):
+                                    origin_mode = "bottom_left"
+                        except Exception:
+                            origin_mode = "center"
 
-                    wall_paths = self._create_procedural_walls(
-                        stage,
-                        root_prim_path,
-                        float(area_size_x),
-                        float(area_size_y),
-                        door_objects,
-                        origin_mode,
-                    )
-                else:
-                    omni.log.warn(
-                        "Cannot generate walls: area_size_X or area_size_Y not found in layout data. "
-                        f"area_size_X={area_size_x}, area_size_Y={area_size_y}"
-                    )
+                        wall_paths = self._create_procedural_walls(
+                            stage,
+                            root_prim_path,
+                            float(area_size_x),
+                            float(area_size_y),
+                            door_objects,
+                            origin_mode,
+                        )
+                    else:
+                        omni.log.warn(
+                            "Cannot generate walls: area_size_X or area_size_Y not found in layout data. "
+                            f"area_size_X={area_size_x}, area_size_Y={area_size_y}"
+                        )
 
-            placed += len(wall_paths) + len(window_paths)
-            omni.log.info(
-                f"Generated {len(wall_paths)} wall segments and {len(window_paths)} window panes"
-            )
-            omni.log.info(f"USD Search placement finished. Placed={placed}, Skipped={skipped}")
-        except asyncio.CancelledError:
-            omni.log.warn("USD Search placement cancelled.")
-            raise
-        except Exception as exc:
-            omni.log.error(f"Unexpected error during USD Search placement: {exc}")
-        finally:
-            self._search_task = None
+                placed += len(wall_paths) + len(window_paths)
+                omni.log.info(
+                    f"Generated {len(wall_paths)} wall segments and {len(window_paths)} window panes"
+                )
+                omni.log.info(f"USD Search placement finished. Placed={placed}, Skipped={skipped}")
+            except asyncio.CancelledError:
+                omni.log.warn("USD Search placement cancelled.")
+                raise
+            except Exception as exc:
+                omni.log.error(f"Unexpected error during USD Search placement: {exc}")
+            finally:
+                self._search_task = None
 
     async def _place_debug_bboxes(self, layout_data) -> None:
         """Place cubes representing JSON bounding boxes (debug mode)."""
@@ -1065,8 +1065,6 @@ class CommandsMixin:
             omni.log.error(f"[DebugBBox] Failed to create bbox for '{object_name}': {exc}")
             return None
 
-
->>>>>>> refactor/structure-overhaul
     async def _blacklist_and_replace_selected_asset(self, prim_path: str) -> None:
         await self._replace_selected_asset(prim_path, add_to_blacklist=True)
 
