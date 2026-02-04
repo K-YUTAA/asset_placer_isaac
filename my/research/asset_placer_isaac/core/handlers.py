@@ -150,8 +150,8 @@ class HandlersMixin:
         asyncio.ensure_future(self._replace_selected_asset(prim_path))
 
     def _on_load_json_click(self):
-        """ "Load JSON File..." ボタンがクリックされた (旧 _on_button_click) """
-        omni.log.info("Load JSON button clicked. Showing File Picker...")
+        """ "Select JSON File..." ボタンがクリックされた (旧 _on_button_click) """
+        omni.log.info("Select JSON button clicked. Showing File Picker...")
 
         if self._file_picker:
             self._deferred_destroy_picker()  # 毎回新しく作る
@@ -199,40 +199,51 @@ class HandlersMixin:
         omni.log.info("JSON file loaded successfully")
         omni.log.info(f"Layout data: {self._layout_json}")
 
-    def _on_generate_from_loaded_json_click(self):
-        """読み込まれているJSONからUSD Search配置を開始する"""
+        # Load only; placement uses separate button.
+
+    def _on_generate_from_json_click(self):
+        if self._search_task and not self._search_task.done():
+            self._search_task.cancel()
+
         layout_data = None
 
-        if getattr(self, "_layout_json", None):
-            layout_data = self._layout_json
-        elif getattr(self, "_loaded_json_path", ""):
+        if getattr(self, "_loaded_json_path", "") and os.path.exists(self._loaded_json_path):
             layout_data = self._load_json_with_fallback(self._loaded_json_path)
+            if layout_data is None:
+                omni.log.warn("Failed to load JSON for placement.")
+                return
+            self._layout_json = layout_data
+        elif getattr(self, "_layout_json", None):
+            layout_data = self._layout_json
 
         if layout_data is None:
-            omni.log.warn("No loaded JSON available. Load a JSON file first.")
+            omni.log.warn("No JSON selected. Use 'Select JSON File...' first.")
             return
 
-        self._layout_json = layout_data
-        self._start_asset_search(self._layout_json)
+        omni.log.info("Starting placement from selected JSON...")
+        self._start_asset_search(layout_data)
 
-    
-    def _on_place_debug_bboxes_click(self):
-        """JSON?????????????BBox?????"""
+    def _on_place_bbox_from_json_click(self):
+        if self._search_task and not self._search_task.done():
+            self._search_task.cancel()
+
         layout_data = None
 
-        if getattr(self, "_layout_json", None):
-            layout_data = self._layout_json
-        elif getattr(self, "_loaded_json_path", ""):
+        if getattr(self, "_loaded_json_path", "") and os.path.exists(self._loaded_json_path):
             layout_data = self._load_json_with_fallback(self._loaded_json_path)
-        elif getattr(self, "_generated_json_path", ""):
-            layout_data = self._load_json_with_fallback(self._generated_json_path)
+            if layout_data is None:
+                omni.log.warn("Failed to load JSON for bbox placement.")
+                return
+            self._layout_json = layout_data
+        elif getattr(self, "_layout_json", None):
+            layout_data = self._layout_json
 
         if layout_data is None:
-            omni.log.warn("No JSON data available for debug bboxes. Load or generate a JSON first.")
+            omni.log.warn("No JSON selected. Use 'Select JSON File...' first.")
             return
 
-        self._layout_json = layout_data
-        self._place_debug_bboxes(layout_data)
+        omni.log.info("Placing debug bounding boxes from selected JSON...")
+        self._search_task = asyncio.ensure_future(self._place_debug_bboxes(layout_data))
 
     def _on_select_image_click(self):
         """画像ファイル選択ボタンのコールバック"""

@@ -46,10 +46,8 @@ def some_public_function(x: int):
     return x**x
 
 
-class MyExtension(
-    SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMixin, omni.ext.IExt
-):
-    """USD Search Placer Extension with Tabbed UI."""
+class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMixin, omni.ext.IExt):
+    """USD Search Placer Extension UI."""
 
     def on_startup(self, _ext_id):
         omni.log.info("[my.research.asset_placer] Extension startup")
@@ -228,6 +226,14 @@ class MyExtension(
         self._additional_context = ""  # 拒否時の追加コンテキスト
         self._context_popup = None  # 修正指示ポップアップウィンドウ
 
+        # --- Debug: place bounding boxes instead of searching assets ---
+        self._debug_bbox_mode = ui.SimpleBoolModel(
+            bool(saved_settings.get("debug_bbox_mode", False))
+        )
+        self._debug_bbox_mode.add_value_changed_fn(
+            lambda m: self._save_settings_to_json()
+        )
+
         self._layout_json = None  # 最終的に使用するJSONデータを保持する変数
         self._file_picker = None
         self._active_tab = 0  # 0: Generate from Image, 1: Details
@@ -260,16 +266,6 @@ class MyExtension(
             # メインの縦積みレイアウト
             with ui.VStack(spacing=5):
                 # タブボタン
-                with ui.HStack(height=30):
-                    self._tab_btn_generate = ui.Button(
-                        "Generate from Image", clicked_fn=lambda: self._switch_tab(0)
-                    )
-                    self._tab_btn_details = ui.Button(
-                        "Details", clicked_fn=lambda: self._switch_tab(1)
-                    )
-
-                ui.Separator()
-
                 # タブコンテンツ用のコンテナ
                 self._tab_container = ui.VStack(spacing=5, height=0)
                 with self._tab_container:

@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Refactored extension internals into `core/` mixins for maintainability
 - Entry point now loads `core.extension_app` via `config/extension.toml`
 - Documentation refreshed to match the new structure
+- JSON workflow UI reorganized (inputs, AI generation, JSON files, placement)
+- Added debug BBox placement button driven by loaded/selected JSON
+- Split JSON loading from scene generation (separate "Select JSON" and "Generate Scene" actions)
+- Unified wording from "Loaded" to "Selected" JSON across UI
+- Removed tabbed UI; consolidated metadata/offset controls into the main view
 
 ## [2026-01-29]
 

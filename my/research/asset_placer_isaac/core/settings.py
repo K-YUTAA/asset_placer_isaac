@@ -160,6 +160,7 @@ class SettingsMixin:
                 "auto_layout_enabled": bool(getattr(self, "_auto_layout_enabled", False)),
                 "auto_layout_mode": getattr(self, "_auto_layout_mode", "quick"),
                 "auto_layout_file": getattr(self, "_auto_layout_file", ""),
+                "debug_bbox_mode": bool(self._debug_bbox_mode.as_bool) if hasattr(self, "_debug_bbox_mode") else False,
                 "asset_blacklist": sorted(getattr(self, "_asset_blacklist", set())),
                 "asset_blacklist_keys": sorted(getattr(self, "_asset_blacklist_keys", set())),
             }
