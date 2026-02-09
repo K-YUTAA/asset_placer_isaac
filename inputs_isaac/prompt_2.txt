@@ -18,6 +18,7 @@ MULTI-ROOM JSON SCHEMA (preferred):
   "area_name": string,
   "area_size_X": number,  // meters (overall)
   "area_size_Y": number,  // meters (overall)
+  "size_mode": "local",
   "room_polygon": [        // optional single-room fallback
     { "X": number, "Y": number }
   ],
@@ -46,10 +47,10 @@ MULTI-ROOM JSON SCHEMA (preferred):
       "room_id": string (optional),
       "X": number,      // meters
       "Y": number,      // meters
-      "Length": number, // meters (X-axis size)
-      "Width": number,  // meters (Y-axis size)
-      "Height": number, // meters (Z-axis size)
-      "rotationZ": number,  // degrees: 0/90/180/270
+      "Length": number, // meters (local +X / right)
+      "Width": number,  // meters (local +Y / forward / functional front)
+      "Height": number, // meters (local +Z / up)
+      "rotationZ": number,  // degrees: 0:+Y, 90:+X, 180:-Y, 270:-X (object +Y direction)
       "Material": string (optional)
     }
   ]
@@ -58,7 +59,8 @@ MULTI-ROOM JSON SCHEMA (preferred):
 Placement rules:
 1) The image is an XY top-down plan. Preserve the layout as drawn.
 2) Right in the image is +X. Up in the image is +Y.
-3) Use Length for the X-axis size, Width for the Y-axis size, Height for Z.
+3) Use local size semantics: Length=local +X (right), Width=local +Y (forward/functional front), Height=local +Z (up).
+   Do NOT swap Length/Width based on rotationZ.
 4) Always include a FLOOR object in area_objects_list:
    - object_name: "floor", category: "floor"
    - X, Y: center of the overall plan

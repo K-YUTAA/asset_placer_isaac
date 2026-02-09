@@ -1,0 +1,11 @@
+# LAYOUT_HINTS
+# すべての部屋種別を記載し、ない部屋は :0 とする
+OUTLINE=RECT
+SCALE_WIDTH_M=24
+SCALE_HEIGHT_M=10
+ROOMS=ldk:1,living:0,dining:0,kitchen:0,bedroom:1\\,kids_room:0,study:0,bathroom:1,toilet:1,washroom:0,closet:0,storage:5,hallway:0,entrance:1,garage:0,balcony:1,laundry:0,pantry:0,utility:1,office:0,guest_room:0
+DOOR_COUNT=9
+WINDOW_COUNT=11
+WINDOW_HEIGHT_M=1.2
+WINDOW_SILL_M=1.0
+

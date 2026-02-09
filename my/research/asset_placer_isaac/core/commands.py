@@ -716,6 +716,12 @@ class CommandsMixin:
                         "'area_objects_list', 'objects', or a top-level list of entries."
                     )
                     return
+                size_mode = str(layout_data.get("size_mode") or "world").lower()
+                if size_mode not in ("world", "local"):
+                    size_mode = "world"
+                for obj in objects:
+                    if isinstance(obj, dict) and "size_mode" not in obj:
+                        obj["size_mode"] = size_mode
                 omni.log.info(f"Found {len(objects)} candidate objects for placement.")
     
                 # ドアのリストを収集（壁の切り抜き用）
@@ -925,6 +931,13 @@ class CommandsMixin:
                 omni.log.warn("Layout data does not contain placeable objects for debug bbox placement.")
                 return
 
+            size_mode = str(layout_data.get("size_mode") or "world").lower()
+            if size_mode not in ("world", "local"):
+                size_mode = "world"
+            for obj in objects:
+                if isinstance(obj, dict) and "size_mode" not in obj:
+                    obj["size_mode"] = size_mode
+
             omni.log.info(f"[DebugBBox] Placing {len(objects)} bounding boxes...")
 
             for index, obj in enumerate(objects):
@@ -984,11 +997,15 @@ class CommandsMixin:
                 )
                 or 0.0
             )
+            size_mode = str(object_data.get("size_mode") or "world").lower()
+            if size_mode not in ("world", "local"):
+                size_mode = "world"
+            front_rotation_source = 0.0 if size_mode == "local" else rotation
 
             front_thickness = max(0.02, min(0.1, width * 0.1))
 
             # Direction mapping: rotationZ=0 => +Y, 90 => +X, 180 => -Y, 270 => -X
-            theta = math.radians(rotation)
+            theta = math.radians(front_rotation_source)
             dir_x = math.sin(theta)
             dir_y = math.cos(theta)
 
@@ -1032,6 +1049,8 @@ class CommandsMixin:
             except Exception:
                 pass
             root_ops.AddTranslateOp().Set(Gf.Vec3d(x, y, 0.0))
+            if size_mode == "local":
+                root_ops.AddRotateZOp().Set(rotation)
 
             body_path = f"{root_path}/Body"
             body = UsdGeom.Cube.Define(stage, Sdf.Path(body_path))
@@ -1341,6 +1360,9 @@ class CommandsMixin:
                 f"[Transform] rotation base={base_rotation} deg, offset={rotation_offset} deg, "
                 f"effective={effective_rotation} deg"
             )
+        size_mode = str(data.get("size_mode") or "world").lower()
+        if size_mode not in ("world", "local"):
+            size_mode = "world"
 
         # ステップ4: 「目標のサイズ」の読み取り（Z-Up座標系）
         # JSONからLength, Height, Width（メートル単位）を読み取り
@@ -1351,6 +1373,102 @@ class CommandsMixin:
         category = str(data.get("category", "") or "")
         category_lower = category.lower()
         is_door = category_lower == "door" or "door" in object_name.lower()
+
+        if size_mode == "local":
+            # Local mode: Length/Width/Height are object-local axes (X=Right, Y=Forward, Z=Up).
+            target_size_x = json_length
+            target_size_y = json_width
+            target_size_z = json_height
+
+            # XformOps order: Translate(world) -> RotateZ(world) -> Scale(world) -> RotateZ(offset) -> RotateX(up)
+            translate_op = xformable.AddTranslateOp(opSuffix="world")
+            rotate_world_op = xformable.AddRotateZOp(opSuffix="world")
+            scale_op = xformable.AddScaleOp(opSuffix="world")
+            rotate_offset_op = xformable.AddRotateZOp(opSuffix="offset")
+            rotate_up_op = None
+            if up_axis == "Y":
+                rotate_up_op = xformable.AddRotateXOp(opSuffix="up")
+
+            translate_op.Set(Gf.Vec3d(0.0, 0.0, 0.0))
+            rotate_world_op.Set(0.0)
+            scale_op.Set(Gf.Vec3f(1.0, 1.0, 1.0))
+            rotate_offset_op.Set(rotation_offset)
+            if rotate_up_op:
+                rotate_up_op.Set(90.0)
+
+            # Measure normalized size after offset + upAxis (world rotation disabled).
+            bbox_cache_local = UsdGeom.BBoxCache(time_code, ["default"])
+            bbox_local = bbox_cache_local.ComputeWorldBound(prim)
+            bbox_range_local = bbox_local.ComputeAlignedRange()
+            normalized_vec = bbox_range_local.GetMax() - bbox_range_local.GetMin()
+            normalized_size_x = normalized_vec[0]
+            normalized_size_y = normalized_vec[1]
+            normalized_size_z = normalized_vec[2]
+
+            def safe_div(num: float, denom: float) -> float:
+                if abs(denom) > 1e-6 and num > 0:
+                    return num / denom
+                return 1.0
+
+            scale_x = safe_div(target_size_x, normalized_size_x)
+            scale_y = safe_div(target_size_y, normalized_size_y)
+            scale_z = safe_div(target_size_z, normalized_size_z)
+            final_scale = Gf.Vec3f(scale_x, scale_y, scale_z)
+            scale_op.Set(final_scale)
+
+            # Apply world rotation after scale.
+            rotate_world_op.Set(base_rotation)
+
+            # Compute bbox after scale + world rotation to place in world.
+            bbox_cache2 = UsdGeom.BBoxCache(time_code, ["default"])
+            bbox2 = bbox_cache2.ComputeWorldBound(prim)
+            bbox_range2 = bbox2.ComputeAlignedRange()
+            min_after = bbox_range2.GetMin()
+            max_after = bbox_range2.GetMax()
+            min_z_after_rot_scale = min_after[2]
+            center_x_after = (min_after[0] + max_after[0]) * 0.5
+            center_y_after = (min_after[1] + max_after[1]) * 0.5
+
+            x = self._extract_float(data, "X", 0.0)
+            y = self._extract_float(data, "Y", 0.0)
+            x -= center_x_after
+            y -= center_y_after
+
+            search_prompt = str(data.get("search_prompt", "") or "")
+            search_query = self._build_search_query_from_object({
+                "object_name": object_name,
+                "category": category,
+                "search_prompt": search_prompt,
+            })
+            self._store_placement_metadata(
+                prim,
+                asset_url,
+                base_rotation,
+                json_length,
+                json_width,
+                json_height,
+                x,
+                y,
+                object_name=object_name,
+                category=category,
+                search_prompt=search_prompt,
+                search_query=search_query,
+            )
+
+            translate_z = -min_z_after_rot_scale
+            translate_op.Set(Gf.Vec3d(x, y, translate_z))
+
+            omni.log.info(
+                "[LocalMode] "
+                f"object='{object_name}', category='{category}', size_mode={size_mode}, "
+                f"target=({target_size_x:.4f}, {target_size_y:.4f}, {target_size_z:.4f}), "
+                f"normalized=({normalized_size_x:.4f}, {normalized_size_y:.4f}, {normalized_size_z:.4f}), "
+                f"scale=({scale_x:.4f}, {scale_y:.4f}, {scale_z:.4f}), "
+                f"rotationZ={base_rotation}, offset={rotation_offset}, up_axis={up_axis}, "
+                f"translate_z={translate_z:.4f}"
+            )
+
+            return
 
 
         # Z-Up axis mapping

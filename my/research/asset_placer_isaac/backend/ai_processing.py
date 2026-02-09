@@ -700,6 +700,19 @@ def step3_check_collisions(layout: Dict[str, Any]) -> List[Tuple[str, str, float
             height = float(obj.get("Height", 1.0))  # y-axis
             width = float(obj.get("Width", 1.0))    # z-axis
 
+            rotation_z = float(obj.get("rotationZ", 0.0))
+            size_mode = obj.get("size_mode") or layout.get("size_mode") or "world"
+            if isinstance(size_mode, str):
+                size_mode = size_mode.lower()
+            else:
+                size_mode = "world"
+            if size_mode not in ("world", "local"):
+                size_mode = "world"
+            if size_mode == "local":
+                rot = int(round(rotation_z)) % 360
+                if rot in (90, 270):
+                    length, width = width, length
+
             # 中心座標から最小・最大座標を計算
             # Y座標は床面(0)から高さまで
             min_x, max_x = cx - length / 2, cx + length / 2

@@ -15,6 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Unified wording from "Loaded" to "Selected" JSON across UI
 - Removed tabbed UI; consolidated metadata/offset controls into the main view
 - Fixed placement pipeline indentation issue causing extension load failure
+- Added `size_mode`-aware placement path (`world`/`local`) in `core/commands.py`
+- Updated local-mode transform flow to separate world rotation from asset offset and improve local-dimension scaling
+- Updated collision check (`backend/ai_processing.py`) to swap local X/Y footprint for `rotationZ` 90/270 only in `size_mode=local`
+- Updated local-semantics instructions in `core/constants.py` and `inputs_isaac/prompt_2.txt`
+- Refreshed `inputs_isaac` dimension samples (removed duplicate copies, added `dimensions_big_house.txt` and `dimensions_two-story_1.txt`)
 
 ## [2026-01-29]
 
