@@ -98,6 +98,11 @@ class SettingsMixin:
                 if hasattr(self, "_ai_image_detail_combo")
                 else self._ai_image_detail_index
             )
+            json_size_mode_index = (
+                self._json_size_mode_combo.model.get_item_value_model().as_int
+                if hasattr(self, "_json_size_mode_combo") and self._json_size_mode_combo
+                else getattr(self, "_json_size_mode_index", 1)
+            )
             max_output_tokens = self._ai_max_output_tokens
             if hasattr(self, "_ai_max_output_tokens_model"):
                 raw_tokens = self._ai_max_output_tokens_model.as_string.strip()
@@ -136,6 +141,7 @@ class SettingsMixin:
             self._ai_reasoning_effort_index = reasoning_effort_index
             self._ai_text_verbosity_index = text_verbosity_index
             self._ai_image_detail_index = image_detail_index
+            self._json_size_mode_index = json_size_mode_index
             self._ai_max_output_tokens = max_output_tokens
             self._ai_max_retries = max_retries
             self._ai_retry_delay_sec = retry_delay_sec
@@ -151,6 +157,7 @@ class SettingsMixin:
                 "model_index": self._model_combo.model.get_item_value_model().as_int if hasattr(self, "_model_combo") else 0,
                 "ai_step1_model_index": step1_model_index,
                 "ai_step2_model_index": step2_model_index,
+                "json_size_mode_index": json_size_mode_index,
                 "ai_reasoning_effort_index": reasoning_effort_index,
                 "ai_text_verbosity_index": text_verbosity_index,
                 "ai_image_detail_index": image_detail_index,

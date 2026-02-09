@@ -62,6 +62,7 @@ ADV_MODEL_CHOICES = ["(Use main model)"] + MODEL_CHOICES + ["gpt-5.2-pro"]
 REASONING_EFFORT_CHOICES = ["(default)", "low", "medium", "high", "xhigh"]
 TEXT_VERBOSITY_CHOICES = ["(default)", "low", "medium", "high"]
 IMAGE_DETAIL_CHOICES = ["(default)", "low", "high"]
+JSON_SIZE_MODE_CHOICES = ["world", "local"]
 
 # Vector Searchで取得する候補数の上限
 VECTOR_SEARCH_LIMIT = 50

@@ -24,6 +24,7 @@ from .constants import (
     DEFAULT_PROMPT1_TEXT,
     DEFAULT_PROMPT2_TEXT,
     IMAGE_DETAIL_CHOICES,
+    JSON_SIZE_MODE_CHOICES,
     MODEL_CHOICES,
     REASONING_EFFORT_CHOICES,
     TEXT_VERBOSITY_CHOICES,
@@ -107,6 +108,13 @@ class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMix
         self._ai_reasoning_effort_index = saved_settings.get(
             "ai_reasoning_effort_index", 0
         )
+        self._json_size_mode_index = saved_settings.get(
+            "json_size_mode_index", 1 if len(JSON_SIZE_MODE_CHOICES) > 1 else 0
+        )
+        if not isinstance(self._json_size_mode_index, int):
+            self._json_size_mode_index = 1 if len(JSON_SIZE_MODE_CHOICES) > 1 else 0
+        if self._json_size_mode_index < 0 or self._json_size_mode_index >= len(JSON_SIZE_MODE_CHOICES):
+            self._json_size_mode_index = 1 if len(JSON_SIZE_MODE_CHOICES) > 1 else 0
         self._ai_text_verbosity_index = saved_settings.get("ai_text_verbosity_index", 0)
         self._ai_image_detail_index = saved_settings.get("ai_image_detail_index", 0)
         self._ai_max_output_tokens = saved_settings.get("ai_max_output_tokens", 16000)
@@ -164,6 +172,7 @@ class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMix
         self._ai_tokens_label = None
         self._generate_button = None
         self._cancel_ai_button = None
+        self._json_size_mode_combo = None
         self._ai_task: Optional[asyncio.Task] = None
 
         # --- 生成JSONプレビュー用モデル ---

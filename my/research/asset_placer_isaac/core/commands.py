@@ -28,6 +28,7 @@ from .constants import (
     DEFAULT_PROMPT1_TEXT,
     DEFAULT_PROMPT2_TEXT,
     IMAGE_DETAIL_CHOICES,
+    JSON_SIZE_MODE_CHOICES,
     MODEL_CHOICES,
     REASONING_EFFORT_CHOICES,
     TEXT_VERBOSITY_CHOICES,
@@ -87,6 +88,60 @@ class CommandsMixin:
             "text_verbosity": text_verbosity,
             "image_detail": image_detail,
         }
+
+    def _get_selected_json_size_mode(self) -> str:
+        default_index = 1 if len(JSON_SIZE_MODE_CHOICES) > 1 else 0
+        index = getattr(self, "_json_size_mode_index", default_index)
+        combo = getattr(self, "_json_size_mode_combo", None)
+        if combo:
+            try:
+                index = combo.model.get_item_value_model().as_int
+            except Exception:
+                index = getattr(self, "_json_size_mode_index", default_index)
+        if not isinstance(index, int):
+            index = default_index
+        if index < 0 or index >= len(JSON_SIZE_MODE_CHOICES):
+            index = default_index
+        self._json_size_mode_index = index
+
+        mode = str(JSON_SIZE_MODE_CHOICES[index]).lower()
+        if mode not in ("world", "local"):
+            mode = "world"
+        return mode
+
+    def _apply_size_mode_override_to_prompt2(self, prompt2_text: str, size_mode: str) -> str:
+        mode = str(size_mode or "world").lower()
+        if mode not in ("world", "local"):
+            mode = "world"
+
+        if mode == "local":
+            override_block = (
+                "\n\n[SIZE_MODE OVERRIDE]\n"
+                "This override has highest priority over any previous size definition.\n"
+                "Use top-level `size_mode` = \"local\".\n"
+                "Length = object local +X (right), Width = object local +Y (forward / functional front), Height = local +Z.\n"
+                "rotationZ defines where object local +Y points in world (0:+Y, 90:+X, 180:-Y, 270:-X).\n"
+                "Do NOT swap Length/Width based on rotationZ.\n"
+            )
+        else:
+            override_block = (
+                "\n\n[SIZE_MODE OVERRIDE]\n"
+                "This override has highest priority over any previous size definition.\n"
+                "Use top-level `size_mode` = \"world\".\n"
+                "Length = world X size, Width = world Y size, Height = world Z size.\n"
+                "rotationZ still follows functional front direction (0:+Y, 90:+X, 180:-Y, 270:-X).\n"
+                "In world mode, Length/Width values must represent final world-axis footprint.\n"
+            )
+        return f"{prompt2_text.rstrip()}{override_block}"
+
+    def _enforce_size_mode_on_layout(self, layout_json: Any, size_mode: str) -> Any:
+        if not isinstance(layout_json, dict):
+            return layout_json
+        mode = str(size_mode or "world").lower()
+        if mode not in ("world", "local"):
+            mode = "world"
+        layout_json["size_mode"] = mode
+        return layout_json
 
     def _get_replacement_history(self, prim_path: str) -> Dict[str, List[str]]:
         if not hasattr(self, "_replacement_history_by_prim") or self._replacement_history_by_prim is None:
@@ -186,6 +241,8 @@ class CommandsMixin:
             prompt2_text, prompt2_source = self._resolve_prompt_text(
                 self._prompt2_path, "prompt_2.txt", DEFAULT_PROMPT2_TEXT, "Prompt 2"
             )
+            json_size_mode = self._get_selected_json_size_mode()
+            prompt2_text = self._apply_size_mode_override_to_prompt2(prompt2_text, json_size_mode)
             dimensions_text = self._read_text_with_fallback(self._dimensions_path, "Dimensions", required=True)
 
             if dimensions_text is None:
@@ -205,6 +262,7 @@ class CommandsMixin:
             omni.log.info(f"Dimensions: {self._dimensions_path}")
             omni.log.info(f"Prompt 1 source: {prompt1_source}")
             omni.log.info(f"Prompt 2 source: {prompt2_source}")
+            omni.log.info(f"JSON size_mode for generation: {json_size_mode}")
 
             # 画像のBase64エンコード
             image_base64 = be.encode_image_to_base64(self._image_path)
@@ -266,6 +324,7 @@ class CommandsMixin:
                     "step1_stats": step1_stats,
                     "image_base64": image_base64,
                     "prompt2_text": prompt2_text,
+                    "json_size_mode": json_size_mode,
                     "dimensions_text": dimensions_text,
                     "model_name": model_name,
                     "step2_model_name": step2_model_name,
@@ -299,6 +358,7 @@ class CommandsMixin:
                 omni.log.error("Failed to generate JSON")
                 self._analysis_text_model.as_string += "\nError: Failed to generate JSON."
                 return
+            layout_json = self._enforce_size_mode_on_layout(layout_json, json_size_mode)
 
             self._analysis_text_model.as_string += "\nJSON Generation Complete."
             self._set_ai_tokens(step1_stats, step2_stats)
@@ -399,11 +459,13 @@ class CommandsMixin:
             step1_stats = self._analysis_result["step1_stats"]
             image_base64 = self._analysis_result["image_base64"]
             prompt2_text = self._analysis_result["prompt2_text"]
+            json_size_mode = self._analysis_result.get("json_size_mode") or self._get_selected_json_size_mode()
             dimensions_text = self._analysis_result["dimensions_text"]
             model_name = self._analysis_result["model_name"]
             step2_model_name = self._analysis_result.get("step2_model_name", model_name)
             ai_overrides = self._analysis_result.get("ai_overrides", {})
             api_key = self._analysis_result["api_key"]
+            omni.log.info(f"JSON size_mode for generation: {json_size_mode}")
 
             # --- ステップ2: JSON生成 (非同期呼び出し) ---
             omni.log.info("=== Step 2: Generating JSON ===")
@@ -423,6 +485,7 @@ class CommandsMixin:
                 omni.log.error("Failed to generate JSON")
                 self._analysis_text_model.as_string += "\nError: Failed to generate JSON."
                 return
+            layout_json = self._enforce_size_mode_on_layout(layout_json, json_size_mode)
 
             self._analysis_text_model.as_string += "\nJSON Generation Complete."
             self._set_ai_tokens(self._analysis_result["step1_stats"], step2_stats)
