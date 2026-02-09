@@ -27,6 +27,7 @@ from .constants import (
     DEFAULT_PROMPT1_TEXT,
     DEFAULT_PROMPT2_TEXT,
     IMAGE_DETAIL_CHOICES,
+    JSON_SIZE_MODE_CHOICES,
     MODEL_CHOICES,
     REASONING_EFFORT_CHOICES,
     TEXT_VERBOSITY_CHOICES,
@@ -1248,6 +1249,7 @@ class UIMixin:
         self._ai_tokens_label = None
         self._generate_button = None
         self._cancel_ai_button = None
+        self._json_size_mode_combo = None
         self._tab_container.clear()
         with self._tab_container:
             self._build_tab_content()
@@ -1325,14 +1327,26 @@ class UIMixin:
 
                 ui.Spacer(height=10)
 
-                with ui.HStack(height=26):
+                with ui.HStack(height=26, spacing=4):
                     self._generate_button = ui.Button(
                         "Generate JSON & Scene (AI)",
                         clicked_fn=self._on_generate_json_click,
                         width=220,
                         height=26,
                     )
-                    ui.CheckBox(model=self._require_approval, width=20)
+                    with ui.HStack(spacing=2, width=145):
+                        size_mode_index = getattr(self, "_json_size_mode_index", 1)
+                        if size_mode_index < 0 or size_mode_index >= len(JSON_SIZE_MODE_CHOICES):
+                            size_mode_index = 1 if len(JSON_SIZE_MODE_CHOICES) > 1 else 0
+                        ui.Label("size_mode:", width=60)
+                        self._json_size_mode_combo = ui.ComboBox(
+                            size_mode_index, *JSON_SIZE_MODE_CHOICES, width=80
+                        )
+                        self._json_size_mode_combo.model.get_item_value_model().add_value_changed_fn(
+                            lambda m: self._save_settings_to_json()
+                        )
+                    ui.Spacer(width=10)
+                    ui.CheckBox(model=self._require_approval, width=18)
                     ui.Label("Require approval after image analysis", width=0)
                 with ui.HStack(height=24):
                     self._cancel_ai_button = ui.Button("Cancel AI", clicked_fn=self._on_cancel_ai_click, width=120, height=24)

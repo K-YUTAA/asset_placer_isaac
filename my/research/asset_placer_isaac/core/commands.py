@@ -28,6 +28,7 @@ from .constants import (
     DEFAULT_PROMPT1_TEXT,
     DEFAULT_PROMPT2_TEXT,
     IMAGE_DETAIL_CHOICES,
+    JSON_SIZE_MODE_CHOICES,
     MODEL_CHOICES,
     REASONING_EFFORT_CHOICES,
     TEXT_VERBOSITY_CHOICES,
@@ -87,6 +88,60 @@ class CommandsMixin:
             "text_verbosity": text_verbosity,
             "image_detail": image_detail,
         }
+
+    def _get_selected_json_size_mode(self) -> str:
+        default_index = 1 if len(JSON_SIZE_MODE_CHOICES) > 1 else 0
+        index = getattr(self, "_json_size_mode_index", default_index)
+        combo = getattr(self, "_json_size_mode_combo", None)
+        if combo:
+            try:
+                index = combo.model.get_item_value_model().as_int
+            except Exception:
+                index = getattr(self, "_json_size_mode_index", default_index)
+        if not isinstance(index, int):
+            index = default_index
+        if index < 0 or index >= len(JSON_SIZE_MODE_CHOICES):
+            index = default_index
+        self._json_size_mode_index = index
+
+        mode = str(JSON_SIZE_MODE_CHOICES[index]).lower()
+        if mode not in ("world", "local"):
+            mode = "world"
+        return mode
+
+    def _apply_size_mode_override_to_prompt2(self, prompt2_text: str, size_mode: str) -> str:
+        mode = str(size_mode or "world").lower()
+        if mode not in ("world", "local"):
+            mode = "world"
+
+        if mode == "local":
+            override_block = (
+                "\n\n[SIZE_MODE OVERRIDE]\n"
+                "This override has highest priority over any previous size definition.\n"
+                "Use top-level `size_mode` = \"local\".\n"
+                "Length = object local +X (right), Width = object local +Y (forward / functional front), Height = local +Z.\n"
+                "rotationZ defines where object local +Y points in world (0:+Y, 90:+X, 180:-Y, 270:-X).\n"
+                "Do NOT swap Length/Width based on rotationZ.\n"
+            )
+        else:
+            override_block = (
+                "\n\n[SIZE_MODE OVERRIDE]\n"
+                "This override has highest priority over any previous size definition.\n"
+                "Use top-level `size_mode` = \"world\".\n"
+                "Length = world X size, Width = world Y size, Height = world Z size.\n"
+                "rotationZ still follows functional front direction (0:+Y, 90:+X, 180:-Y, 270:-X).\n"
+                "In world mode, Length/Width values must represent final world-axis footprint.\n"
+            )
+        return f"{prompt2_text.rstrip()}{override_block}"
+
+    def _enforce_size_mode_on_layout(self, layout_json: Any, size_mode: str) -> Any:
+        if not isinstance(layout_json, dict):
+            return layout_json
+        mode = str(size_mode or "world").lower()
+        if mode not in ("world", "local"):
+            mode = "world"
+        layout_json["size_mode"] = mode
+        return layout_json
 
     def _get_replacement_history(self, prim_path: str) -> Dict[str, List[str]]:
         if not hasattr(self, "_replacement_history_by_prim") or self._replacement_history_by_prim is None:
@@ -186,6 +241,8 @@ class CommandsMixin:
             prompt2_text, prompt2_source = self._resolve_prompt_text(
                 self._prompt2_path, "prompt_2.txt", DEFAULT_PROMPT2_TEXT, "Prompt 2"
             )
+            json_size_mode = self._get_selected_json_size_mode()
+            prompt2_text = self._apply_size_mode_override_to_prompt2(prompt2_text, json_size_mode)
             dimensions_text = self._read_text_with_fallback(self._dimensions_path, "Dimensions", required=True)
 
             if dimensions_text is None:
@@ -205,6 +262,7 @@ class CommandsMixin:
             omni.log.info(f"Dimensions: {self._dimensions_path}")
             omni.log.info(f"Prompt 1 source: {prompt1_source}")
             omni.log.info(f"Prompt 2 source: {prompt2_source}")
+            omni.log.info(f"JSON size_mode for generation: {json_size_mode}")
 
             # 画像のBase64エンコード
             image_base64 = be.encode_image_to_base64(self._image_path)
@@ -266,6 +324,7 @@ class CommandsMixin:
                     "step1_stats": step1_stats,
                     "image_base64": image_base64,
                     "prompt2_text": prompt2_text,
+                    "json_size_mode": json_size_mode,
                     "dimensions_text": dimensions_text,
                     "model_name": model_name,
                     "step2_model_name": step2_model_name,
@@ -299,6 +358,7 @@ class CommandsMixin:
                 omni.log.error("Failed to generate JSON")
                 self._analysis_text_model.as_string += "\nError: Failed to generate JSON."
                 return
+            layout_json = self._enforce_size_mode_on_layout(layout_json, json_size_mode)
 
             self._analysis_text_model.as_string += "\nJSON Generation Complete."
             self._set_ai_tokens(step1_stats, step2_stats)
@@ -399,11 +459,13 @@ class CommandsMixin:
             step1_stats = self._analysis_result["step1_stats"]
             image_base64 = self._analysis_result["image_base64"]
             prompt2_text = self._analysis_result["prompt2_text"]
+            json_size_mode = self._analysis_result.get("json_size_mode") or self._get_selected_json_size_mode()
             dimensions_text = self._analysis_result["dimensions_text"]
             model_name = self._analysis_result["model_name"]
             step2_model_name = self._analysis_result.get("step2_model_name", model_name)
             ai_overrides = self._analysis_result.get("ai_overrides", {})
             api_key = self._analysis_result["api_key"]
+            omni.log.info(f"JSON size_mode for generation: {json_size_mode}")
 
             # --- ステップ2: JSON生成 (非同期呼び出し) ---
             omni.log.info("=== Step 2: Generating JSON ===")
@@ -423,6 +485,7 @@ class CommandsMixin:
                 omni.log.error("Failed to generate JSON")
                 self._analysis_text_model.as_string += "\nError: Failed to generate JSON."
                 return
+            layout_json = self._enforce_size_mode_on_layout(layout_json, json_size_mode)
 
             self._analysis_text_model.as_string += "\nJSON Generation Complete."
             self._set_ai_tokens(self._analysis_result["step1_stats"], step2_stats)
@@ -716,6 +779,12 @@ class CommandsMixin:
                         "'area_objects_list', 'objects', or a top-level list of entries."
                     )
                     return
+                size_mode = str(layout_data.get("size_mode") or "world").lower()
+                if size_mode not in ("world", "local"):
+                    size_mode = "world"
+                for obj in objects:
+                    if isinstance(obj, dict) and "size_mode" not in obj:
+                        obj["size_mode"] = size_mode
                 omni.log.info(f"Found {len(objects)} candidate objects for placement.")
     
                 # ドアのリストを収集（壁の切り抜き用）
@@ -925,6 +994,13 @@ class CommandsMixin:
                 omni.log.warn("Layout data does not contain placeable objects for debug bbox placement.")
                 return
 
+            size_mode = str(layout_data.get("size_mode") or "world").lower()
+            if size_mode not in ("world", "local"):
+                size_mode = "world"
+            for obj in objects:
+                if isinstance(obj, dict) and "size_mode" not in obj:
+                    obj["size_mode"] = size_mode
+
             omni.log.info(f"[DebugBBox] Placing {len(objects)} bounding boxes...")
 
             for index, obj in enumerate(objects):
@@ -984,11 +1060,15 @@ class CommandsMixin:
                 )
                 or 0.0
             )
+            size_mode = str(object_data.get("size_mode") or "world").lower()
+            if size_mode not in ("world", "local"):
+                size_mode = "world"
+            front_rotation_source = 0.0 if size_mode == "local" else rotation
 
             front_thickness = max(0.02, min(0.1, width * 0.1))
 
             # Direction mapping: rotationZ=0 => +Y, 90 => +X, 180 => -Y, 270 => -X
-            theta = math.radians(rotation)
+            theta = math.radians(front_rotation_source)
             dir_x = math.sin(theta)
             dir_y = math.cos(theta)
 
@@ -1032,6 +1112,8 @@ class CommandsMixin:
             except Exception:
                 pass
             root_ops.AddTranslateOp().Set(Gf.Vec3d(x, y, 0.0))
+            if size_mode == "local":
+                root_ops.AddRotateZOp().Set(rotation)
 
             body_path = f"{root_path}/Body"
             body = UsdGeom.Cube.Define(stage, Sdf.Path(body_path))
@@ -1341,6 +1423,9 @@ class CommandsMixin:
                 f"[Transform] rotation base={base_rotation} deg, offset={rotation_offset} deg, "
                 f"effective={effective_rotation} deg"
             )
+        size_mode = str(data.get("size_mode") or "world").lower()
+        if size_mode not in ("world", "local"):
+            size_mode = "world"
 
         # ステップ4: 「目標のサイズ」の読み取り（Z-Up座標系）
         # JSONからLength, Height, Width（メートル単位）を読み取り
@@ -1351,6 +1436,102 @@ class CommandsMixin:
         category = str(data.get("category", "") or "")
         category_lower = category.lower()
         is_door = category_lower == "door" or "door" in object_name.lower()
+
+        if size_mode == "local":
+            # Local mode: Length/Width/Height are object-local axes (X=Right, Y=Forward, Z=Up).
+            target_size_x = json_length
+            target_size_y = json_width
+            target_size_z = json_height
+
+            # XformOps order: Translate(world) -> RotateZ(world) -> Scale(world) -> RotateZ(offset) -> RotateX(up)
+            translate_op = xformable.AddTranslateOp(opSuffix="world")
+            rotate_world_op = xformable.AddRotateZOp(opSuffix="world")
+            scale_op = xformable.AddScaleOp(opSuffix="world")
+            rotate_offset_op = xformable.AddRotateZOp(opSuffix="offset")
+            rotate_up_op = None
+            if up_axis == "Y":
+                rotate_up_op = xformable.AddRotateXOp(opSuffix="up")
+
+            translate_op.Set(Gf.Vec3d(0.0, 0.0, 0.0))
+            rotate_world_op.Set(0.0)
+            scale_op.Set(Gf.Vec3f(1.0, 1.0, 1.0))
+            rotate_offset_op.Set(rotation_offset)
+            if rotate_up_op:
+                rotate_up_op.Set(90.0)
+
+            # Measure normalized size after offset + upAxis (world rotation disabled).
+            bbox_cache_local = UsdGeom.BBoxCache(time_code, ["default"])
+            bbox_local = bbox_cache_local.ComputeWorldBound(prim)
+            bbox_range_local = bbox_local.ComputeAlignedRange()
+            normalized_vec = bbox_range_local.GetMax() - bbox_range_local.GetMin()
+            normalized_size_x = normalized_vec[0]
+            normalized_size_y = normalized_vec[1]
+            normalized_size_z = normalized_vec[2]
+
+            def safe_div(num: float, denom: float) -> float:
+                if abs(denom) > 1e-6 and num > 0:
+                    return num / denom
+                return 1.0
+
+            scale_x = safe_div(target_size_x, normalized_size_x)
+            scale_y = safe_div(target_size_y, normalized_size_y)
+            scale_z = safe_div(target_size_z, normalized_size_z)
+            final_scale = Gf.Vec3f(scale_x, scale_y, scale_z)
+            scale_op.Set(final_scale)
+
+            # Apply world rotation after scale.
+            rotate_world_op.Set(base_rotation)
+
+            # Compute bbox after scale + world rotation to place in world.
+            bbox_cache2 = UsdGeom.BBoxCache(time_code, ["default"])
+            bbox2 = bbox_cache2.ComputeWorldBound(prim)
+            bbox_range2 = bbox2.ComputeAlignedRange()
+            min_after = bbox_range2.GetMin()
+            max_after = bbox_range2.GetMax()
+            min_z_after_rot_scale = min_after[2]
+            center_x_after = (min_after[0] + max_after[0]) * 0.5
+            center_y_after = (min_after[1] + max_after[1]) * 0.5
+
+            x = self._extract_float(data, "X", 0.0)
+            y = self._extract_float(data, "Y", 0.0)
+            x -= center_x_after
+            y -= center_y_after
+
+            search_prompt = str(data.get("search_prompt", "") or "")
+            search_query = self._build_search_query_from_object({
+                "object_name": object_name,
+                "category": category,
+                "search_prompt": search_prompt,
+            })
+            self._store_placement_metadata(
+                prim,
+                asset_url,
+                base_rotation,
+                json_length,
+                json_width,
+                json_height,
+                x,
+                y,
+                object_name=object_name,
+                category=category,
+                search_prompt=search_prompt,
+                search_query=search_query,
+            )
+
+            translate_z = -min_z_after_rot_scale
+            translate_op.Set(Gf.Vec3d(x, y, translate_z))
+
+            omni.log.info(
+                "[LocalMode] "
+                f"object='{object_name}', category='{category}', size_mode={size_mode}, "
+                f"target=({target_size_x:.4f}, {target_size_y:.4f}, {target_size_z:.4f}), "
+                f"normalized=({normalized_size_x:.4f}, {normalized_size_y:.4f}, {normalized_size_z:.4f}), "
+                f"scale=({scale_x:.4f}, {scale_y:.4f}, {scale_z:.4f}), "
+                f"rotationZ={base_rotation}, offset={rotation_offset}, up_axis={up_axis}, "
+                f"translate_z={translate_z:.4f}"
+            )
+
+            return
 
 
         # Z-Up axis mapping

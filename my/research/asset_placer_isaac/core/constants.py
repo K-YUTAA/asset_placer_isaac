@@ -27,6 +27,7 @@ DEFAULT_PROMPT2_TEXT = (
     '  "area_name": string,\n'
     '  "area_size_X": number,  # meters\n'
     '  "area_size_Y": number,  # meters\n'
+    '  "size_mode": "local",\n'
     '  "area_objects_list": [\n'
     "    {\n"
     '      "object_name": string,\n'
@@ -34,14 +35,17 @@ DEFAULT_PROMPT2_TEXT = (
     '      "search_prompt": string (optional),\n'
     '      "X": number,  # meters\n'
     '      "Y": number,  # meters\n'
-    '      "Length": number,  # meters (X-axis size)\n'
-    '      "Width": number,   # meters (Y-axis size)\n'
-    '      "Height": number,  # meters (Z-up height)\n'
-    '      "rotationZ": number  # degrees: 0/90/180/270\n'
+    '      "Length": number,  # meters (local +X / right)\n'
+    '      "Width": number,   # meters (local +Y / forward / functional front)\n'
+    '      "Height": number,  # meters (local +Z / up)\n'
+    '      "rotationZ": number  # degrees: 0:+Y, 90:+X, 180:-Y, 270:-X (object +Y direction)\n'
     "    }\n"
     "  ]\n"
     "}\n"
-    "Notes: Z is up; positions are X/Y only. Use meters everywhere."
+    "Notes: Z is up; positions are X/Y only. Use meters everywhere. "
+    "Local size semantics: Length=local +X (right), Width=local +Y (forward/functional front), Height=local +Z. "
+    "rotationZ defines the world direction of local +Y (0:+Y, 90:+X, 180:-Y, 270:-X). "
+    "Do NOT swap Length/Width based on rotationZ."
 )
 
 # UI表示/実呼び出しで共通に使うモデル一覧（ComboBoxの順序 = 保存されるmodel_index）
@@ -58,6 +62,7 @@ ADV_MODEL_CHOICES = ["(Use main model)"] + MODEL_CHOICES + ["gpt-5.2-pro"]
 REASONING_EFFORT_CHOICES = ["(default)", "low", "medium", "high", "xhigh"]
 TEXT_VERBOSITY_CHOICES = ["(default)", "low", "medium", "high"]
 IMAGE_DETAIL_CHOICES = ["(default)", "low", "high"]
+JSON_SIZE_MODE_CHOICES = ["world", "local"]
 
 # Vector Searchで取得する候補数の上限
 VECTOR_SEARCH_LIMIT = 50
