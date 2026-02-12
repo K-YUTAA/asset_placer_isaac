@@ -189,6 +189,8 @@ class HandlersMixin:
         filepath = selections[0]
         omni.log.info(f"Selected file: {filepath}")
         self._loaded_json_path = filepath
+        if hasattr(self, "_loaded_json_label") and self._loaded_json_label:
+            self._loaded_json_label.text = f"Selected JSON: {os.path.basename(filepath)}"
 
         layout_data = self._load_json_with_fallback(filepath)
         if layout_data is None:
