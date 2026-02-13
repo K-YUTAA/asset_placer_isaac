@@ -1,8 +1,8 @@
 {
   "inputs": {
-    "sketch_path": "../../../inputs_isaac/prompt_2.txt",
-    "hints_path": "../../../inputs_isaac/prompt_2.txt",
-    "layout_input": "../../../json/living_room2_layout_gpt-5.2_202601291702.json"
+    "sketch_path": "inputs_isaac/floor_plan3.png",
+    "hints_path": "inputs_isaac/dimensions_floor_plan3.txt",
+    "layout_input": "../../../json/floor_plan3_layout_gpt-5.2_202601202244.json"
   },
   "seed": 1,
   "out_dir": "experiments/runs/v0_from_config",
