@@ -6,7 +6,7 @@ import math
 import pathlib
 import random
 import subprocess
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 from layout_tools import (
     extract_json_payload,
@@ -113,6 +113,120 @@ def _build_asset_manifest(layout_v0: Dict[str, Any]) -> Dict[str, Any]:
         }
         manifest[obj_id] = entry
     return manifest
+
+
+
+
+def _read_config_json(path: str) -> Dict[str, Any]:
+    config_path = pathlib.Path(path)
+    return json.loads(config_path.read_text(encoding="utf-8-sig"))
+
+
+def _flatten_v0_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Accept both a flat argparse-style config and a structured config with
+    sections: inputs / eval_params / placement_params.
+    """
+    flat: Dict[str, Any] = {}
+
+    inputs = config.get("inputs")
+    if isinstance(inputs, dict):
+        for key in ("sketch_path", "hints_path", "layout_input"):
+            if key in inputs:
+                flat[key] = inputs[key]
+
+    for key in (
+        "sketch_path",
+        "hints_path",
+        "seed",
+        "out_dir",
+        "llm_cache_mode",
+        "layout_input",
+        "layout_id",
+        "model",
+        "prompt_name",
+        "reasoning",
+        "temperature",
+        "top_p",
+        "grid_resolution",
+        "robot_radius",
+        "start_x",
+        "start_y",
+        "goal_x",
+        "goal_y",
+        "max_iterations",
+        "push_step",
+        "placement_order",
+    ):
+        if key in config:
+            flat[key] = config[key]
+
+    eval_params = config.get("eval_params") or config.get("eval")
+    if isinstance(eval_params, dict):
+        if "grid_resolution_m" in eval_params:
+            flat["grid_resolution"] = eval_params["grid_resolution_m"]
+        if "robot_radius_m" in eval_params:
+            flat["robot_radius"] = eval_params["robot_radius_m"]
+        if isinstance(eval_params.get("start_xy"), (list, tuple)) and len(eval_params["start_xy"]) >= 2:
+            flat["start_x"] = eval_params["start_xy"][0]
+            flat["start_y"] = eval_params["start_xy"][1]
+        if isinstance(eval_params.get("goal_xy"), (list, tuple)) and len(eval_params["goal_xy"]) >= 2:
+            flat["goal_x"] = eval_params["goal_xy"][0]
+            flat["goal_y"] = eval_params["goal_xy"][1]
+
+    placement_params = config.get("placement_params") or config.get("placement")
+    if isinstance(placement_params, dict):
+        if "max_iterations" in placement_params:
+            flat["max_iterations"] = placement_params["max_iterations"]
+        if "push_step_m" in placement_params:
+            flat["push_step"] = placement_params["push_step_m"]
+        if "placement_order" in placement_params:
+            flat["placement_order"] = placement_params["placement_order"]
+
+    return flat
+
+
+def _parser_defaults(parser: argparse.ArgumentParser) -> Dict[str, Any]:
+    defaults: Dict[str, Any] = {}
+    for action in getattr(parser, "_actions", []):
+        dest = getattr(action, "dest", None)
+        if not dest or dest == "help":
+            continue
+        defaults[dest] = getattr(action, "default", None)
+    return defaults
+
+
+def _merge_config_into_args(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+    config_flat: Dict[str, Any],
+) -> None:
+    defaults = _parser_defaults(parser)
+    for key, value in config_flat.items():
+        if not hasattr(args, key):
+            continue
+        if getattr(args, key) == defaults.get(key):
+            setattr(args, key, value)
+
+
+def _to_repo_abs_path(repo_root: pathlib.Path, value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    p = pathlib.Path(text)
+    if p.is_absolute():
+        return str(p)
+    return str((repo_root / p).resolve())
+
+
+def _normalize_path_args(args: argparse.Namespace) -> None:
+    repo_root = pathlib.Path(__file__).resolve().parents[2]
+    args.sketch_path = _to_repo_abs_path(repo_root, getattr(args, "sketch_path", None))
+    args.hints_path = _to_repo_abs_path(repo_root, getattr(args, "hints_path", None))
+    args.layout_input = _to_repo_abs_path(repo_root, getattr(args, "layout_input", None))
+    args.out_dir = _to_repo_abs_path(repo_root, getattr(args, "out_dir", None))
 
 
 def _load_or_generate_raw_payload(args: argparse.Namespace, out_dir: pathlib.Path) -> Dict[str, Any]:
@@ -235,10 +349,11 @@ def run_v0_freeze(args: argparse.Namespace) -> Dict[str, Any]:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Create reproducible v0 baseline artifacts")
-    parser.add_argument("--sketch_path", required=True)
-    parser.add_argument("--hints_path", required=True)
+    parser.add_argument("--config", default=None, help="Path to JSON config file for v0 freeze")
+    parser.add_argument("--sketch_path", default=None)
+    parser.add_argument("--hints_path", default=None)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--out_dir", required=True)
+    parser.add_argument("--out_dir", default=None)
     parser.add_argument("--llm_cache_mode", choices=["write", "read"], default="write")
 
     parser.add_argument("--layout_input", default=None, help="Optional JSON input used instead of live LLM call")
@@ -266,9 +381,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_arg_parser()
     args = parser.parse_args()
+    if args.config:
+        config = _read_config_json(args.config)
+        config_flat = _flatten_v0_config(config)
+        _merge_config_into_args(parser, args, config_flat)
+    _normalize_path_args(args)
+    if not args.sketch_path:
+        parser.error("--sketch_path is required (or provide it in --config)")
+    if not args.hints_path:
+        parser.error("--hints_path is required (or provide it in --config)")
+    if not args.out_dir:
+        parser.error("--out_dir is required (or provide it in --config)")
     outputs = run_v0_freeze(args)
     print(json.dumps(outputs, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
     main()
+
+
+
+
