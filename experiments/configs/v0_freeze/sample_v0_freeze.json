@@ -1,4 +1,4 @@
-﻿{
+{
   "inputs": {
     "sketch_path": "../../../inputs_isaac/prompt_2.txt",
     "hints_path": "../../../inputs_isaac/prompt_2.txt",
@@ -9,19 +9,26 @@
   "llm_cache_mode": "write",
   "layout_id": "layout01",
   "model": "gpt-5.2",
-  "prompt_name": "prompt_2",
+  "prompt_1_name": "prompt_1",
+  "prompt_2_name": "prompt_2",
   "reasoning": "high",
   "temperature": 0.0,
   "top_p": 1.0,
   "eval_params": {
-    "grid_resolution_m": 0.10,
-    "robot_radius_m": 0.30,
-    "start_xy": [0.8, 0.8],
-    "goal_xy": [5.0, 5.0]
+    "grid_resolution_m": 0.1,
+    "robot_radius_m": 0.3,
+    "start_xy": [
+      0.8,
+      0.8
+    ],
+    "goal_xy": [
+      5.0,
+      5.0
+    ]
   },
   "placement_params": {
     "max_iterations": 30,
-    "push_step_m": 0.10,
+    "push_step_m": 0.1,
     "placement_order": "category_then_area"
   }
 }

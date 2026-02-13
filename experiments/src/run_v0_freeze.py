@@ -144,7 +144,8 @@ def _flatten_v0_config(config: Dict[str, Any]) -> Dict[str, Any]:
         "layout_input",
         "layout_id",
         "model",
-        "prompt_name",
+        "prompt_1_name",
+        "prompt_2_name",
         "reasoning",
         "temperature",
         "top_p",
@@ -160,6 +161,17 @@ def _flatten_v0_config(config: Dict[str, Any]) -> Dict[str, Any]:
     ):
         if key in config:
             flat[key] = config[key]
+
+    prompts = config.get("prompts")
+    if isinstance(prompts, dict):
+        if "prompt_1" in prompts and "prompt_1_name" not in flat:
+            flat["prompt_1_name"] = prompts["prompt_1"]
+        if "prompt_2" in prompts and "prompt_2_name" not in flat:
+            flat["prompt_2_name"] = prompts["prompt_2"]
+
+    # Backward compatibility: older configs use `prompt_name` for step2.
+    if "prompt_name" in config and "prompt_2_name" not in flat:
+        flat["prompt_2_name"] = config["prompt_name"]
 
     eval_params = config.get("eval_params") or config.get("eval")
     if isinstance(eval_params, dict):
@@ -298,11 +310,19 @@ def run_v0_freeze(args: argparse.Namespace) -> Dict[str, Any]:
     repo_root = pathlib.Path(__file__).resolve().parents[2]
     commit_hash = _git_commit_hash(repo_root)
 
+    prompt_1_name = getattr(args, "prompt_1_name", None) or "prompt_1"
+    prompt_2_name = (
+        getattr(args, "prompt_2_name", None)
+        or getattr(args, "prompt_name", None)
+        or "prompt_2"
+    )
+
     run_manifest = {
         "created_at": utc_now_iso(),
         "layout_id": layout_id,
         "model": args.model,
-        "prompt": args.prompt_name,
+        "prompt": prompt_2_name,
+        "prompts": {"prompt_1": prompt_1_name, "prompt_2": prompt_2_name},
         "reasoning": args.reasoning,
         "tokens": {
             "input_tokens": 0,
@@ -360,7 +380,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--layout_id", default=None)
 
     parser.add_argument("--model", default="gpt-5.2")
-    parser.add_argument("--prompt_name", default="prompt_2")
+    parser.add_argument("--prompt_1_name", default="prompt_1")
+    parser.add_argument("--prompt_2_name", default="prompt_2")
+    parser.add_argument("--prompt_name", default=None, help="(legacy) alias for prompt_2_name")
     parser.add_argument("--reasoning", default="high")
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top_p", type=float, default=1.0)

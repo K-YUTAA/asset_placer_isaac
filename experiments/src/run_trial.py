@@ -73,6 +73,8 @@ def run_trial(args: argparse.Namespace) -> Dict[str, Any]:
             layout_input=inputs.get("layout_input"),
             layout_id=layout_id,
             model=str(trial_cfg.get("model", "gpt-5.2")),
+            prompt_1_name=str(trial_cfg.get("prompt_1_name", "prompt_1")),
+            prompt_2_name=str(trial_cfg.get("prompt_2_name", trial_cfg.get("prompt_name", "prompt_2"))),
             prompt_name=str(trial_cfg.get("prompt_name", "prompt_2")),
             reasoning=str(trial_cfg.get("reasoning", "high")),
             temperature=float(trial_cfg.get("temperature", 0.0)),
