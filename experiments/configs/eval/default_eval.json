@@ -1,0 +1,13 @@
+﻿{
+  "grid_resolution_m": 0.10,
+  "robot_radius_m": 0.30,
+  "start_xy": [0.8, 0.8],
+  "goal_xy": [5.0, 5.0],
+  "sample_step_m": 0.50,
+  "max_sensor_samples": 10,
+  "tau_R": 0.90,
+  "tau_clr": 0.20,
+  "tau_V": 0.40,
+  "tau_Delta": 0.15,
+  "lambda_rot": 0.50
+}

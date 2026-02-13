@@ -1,0 +1,11 @@
+﻿# Generated artifacts
+runs/*
+!runs/.gitkeep
+results/*
+!results/.gitkeep
+cache/*
+!cache/.gitkeep
+
+# Python cache
+src/__pycache__/
+*.pyc
