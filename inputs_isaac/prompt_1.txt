@@ -6,6 +6,7 @@ Coordinate system (Z-Up, Isaac Sim):
 - Z: height (up)
 - Origin (0, 0): bottom-left inner corner of the floor plan
 - Units: meters
+- Coordinates must be NON-NEGATIVE (X>=0, Y>=0) in this coordinate system.
 
 Your task:
 1. Estimate the overall floor plan size (width X, depth Y) in meters.
