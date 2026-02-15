@@ -96,6 +96,13 @@ def run_trial(args: argparse.Namespace) -> Dict[str, Any]:
         baseline_layout = layout_v0
         selected_layout = layout_v0
         refine_log = None
+        baseline_task_points = None
+        if isinstance(cfg.get("task"), dict) and cfg.get("task"):
+            _, baseline_debug = evaluate_layout(layout_v0, baseline_layout, cfg)
+            baseline_task_points = baseline_debug.get("task_points")
+            if isinstance(baseline_task_points, dict):
+                cfg["start_xy"] = (baseline_task_points.get("start") or {}).get("xy") or cfg.get("start_xy")
+                cfg["goal_xy"] = (baseline_task_points.get("goal") or {}).get("xy") or cfg.get("goal_xy")
 
         if method in {"heuristic", "proposed"}:
             refined_layout, refined_metrics, refine_steps = run_refinement(
@@ -138,6 +145,8 @@ def run_trial(args: argparse.Namespace) -> Dict[str, Any]:
                 "debug_meta": {
                     "path_length_cells": len(debug.get("path_cells") or []),
                     "bottleneck_cell": debug.get("bottleneck_cell"),
+                    "task_points": baseline_task_points,
+                    "task_points_final": debug.get("task_points"),
                 },
             },
         )
