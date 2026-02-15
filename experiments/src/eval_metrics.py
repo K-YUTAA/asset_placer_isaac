@@ -19,6 +19,8 @@ from layout_tools import (
     write_json,
 )
 
+import task_points
+
 Grid = List[List[bool]]
 Cell = Tuple[int, int]
 
@@ -382,8 +384,19 @@ def evaluate_layout(
     inflated = _inflate_occupancy(occ, radius_cells)
     free_mask = _build_free_mask(room_mask, inflated)
 
-    start = _xy_to_cell(as_float(start_xy[0], 0.8), as_float(start_xy[1], 0.8), bounds, resolution)
-    goal = _xy_to_cell(as_float(goal_xy[0], 5.0), as_float(goal_xy[1], 5.0), bounds, resolution)
+    task_points_debug = None
+    task_spec = config.get("task")
+    if isinstance(task_spec, dict) and task_spec:
+        task_points_debug = task_points.resolve_task_points(layout, config, bounds, resolution, free_mask)
+        start_xy = task_points_debug["start"]["xy"]
+        goal_xy = task_points_debug["goal"]["xy"]
+        start_cell = task_points_debug["start"]["cell"]
+        goal_cell = task_points_debug["goal"]["cell"]
+        start = (int(start_cell[0]), int(start_cell[1]))
+        goal = (int(goal_cell[0]), int(goal_cell[1]))
+    else:
+        start = _xy_to_cell(as_float(start_xy[0], 0.8), as_float(start_xy[1], 0.8), bounds, resolution)
+        goal = _xy_to_cell(as_float(goal_xy[0], 5.0), as_float(goal_xy[1], 5.0), bounds, resolution)
 
     reachable, _ = _bfs_reachable(free_mask, start)
     free_total = sum(1 for iy in range(ny) for ix in range(nx) if free_mask[iy][ix])
@@ -465,6 +478,8 @@ def evaluate_layout(
         "reachable": reachable,
         "distance_to_occ": dist_to_occ,
     }
+    if task_points_debug is not None:
+        debug["task_points"] = task_points_debug
 
     return metrics, debug
 
@@ -502,6 +517,8 @@ def _save_debug_maps(debug: Dict[str, Any], out_dir: pathlib.Path) -> None:
 
     _grid_to_pgm(out_dir / "occupancy.pgm", occ_img)
     _grid_to_pgm(out_dir / "reachability.pgm", reach_img)
+    if debug.get("task_points") is not None:
+        write_json(out_dir / "task_points.json", debug["task_points"])
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
