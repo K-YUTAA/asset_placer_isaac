@@ -21,6 +21,7 @@ experiments/
     eval/
   src/
     layout_tools.py
+    task_points.py
     run_v0_freeze.py
     compare_layout.py
     eval_metrics.py
@@ -74,5 +75,8 @@ python experiments/src/run_trial.py \
 
 - This layer supports both extension-style layout JSON (`area_objects_list`) and
   normalized experiment JSON (`room` + `objects`).
+- `eval_metrics.py` supports `eval.task` to auto-resolve start/goal (snapped to free cells).
+  - `--debug_dir` also writes `task_points.json` alongside the PGM maps.
+- `run_trial.py` stores the resolved points in `trial_manifest.json` (`debug_meta.task_points`).
 - `run_v0_freeze.py` supports `llm_cache_mode=read/write` for deterministic re-runs.
 - Scripts use only Python standard library for portability.
