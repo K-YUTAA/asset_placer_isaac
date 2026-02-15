@@ -1,0 +1,32 @@
+﻿{
+  "trial_id": "expA_layout01_original_seed1",
+  "layout_id": "layout01",
+  "method": "original",
+  "seed": 1,
+  "inputs": {
+    "sketch_path": "../../../inputs_isaac/prompt_2.txt",
+    "hints_path": "../../../inputs_isaac/prompt_2.txt",
+    "layout_input": "../../../json/living_room2_layout_gpt-5.2_202601291702.json"
+  },
+  "llm_cache_mode": "write",
+  "eval": {
+    "grid_resolution_m": 0.10,
+    "robot_radius_m": 0.30,
+    "task": {
+      "start": {
+        "mode": "entrance_slidingdoor_center",
+        "in_offset_m": 0.40,
+        "door_selector": { "strategy": "largest_opening" }
+      },
+      "goal": {
+        "mode": "bedside",
+        "offset_m": 0.60,
+        "bed_selector": { "strategy": "first" },
+        "choose": "closest_to_room_centroid"
+      },
+      "snap": { "max_radius_cells": 30 }
+    },
+    "start_xy": [0.8, 0.8],
+    "goal_xy": [5.0, 5.0]
+  }
+}

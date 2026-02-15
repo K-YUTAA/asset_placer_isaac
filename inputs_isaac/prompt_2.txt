@@ -7,6 +7,10 @@ Coordinate system (Z-Up, Isaac Sim):
 - Z: up (height)
 - Origin (0,0): lower-left inner corner of the overall plan
 
+COORDINATE NORMALIZATION (CRITICAL):
+- Output coordinates must be NON-NEGATIVE (X>=0, Y>=0).
+- area_size_X must equal max X of outer_polygon. area_size_Y must equal max Y of outer_polygon.
+
 CRITICAL UNIT RULE:
 - All coordinates and dimensions must be in METERS.
 - If input is in cm, convert to meters (e.g., 250 cm -> 2.5).
