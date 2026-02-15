@@ -91,8 +91,20 @@ def _select_target_object(
                 best = obj.get("id")
         return best
 
-    start_xy = config.get("start_xy") or [0.8, 0.8]
-    goal_xy = config.get("goal_xy") or [5.0, 5.0]
+    start_xy = None
+    goal_xy = None
+    task_points = debug.get("task_points")
+    if isinstance(task_points, dict):
+        start = (task_points.get("start") or {}).get("xy")
+        goal = (task_points.get("goal") or {}).get("xy")
+        if isinstance(start, (list, tuple)) and len(start) >= 2 and isinstance(goal, (list, tuple)) and len(goal) >= 2:
+            start_xy = start
+            goal_xy = goal
+
+    if start_xy is None:
+        start_xy = config.get("start_xy") or [0.8, 0.8]
+    if goal_xy is None:
+        goal_xy = config.get("goal_xy") or [5.0, 5.0]
     ax, ay = as_float(start_xy[0], 0.8), as_float(start_xy[1], 0.8)
     bx, by = as_float(goal_xy[0], 5.0), as_float(goal_xy[1], 5.0)
 
