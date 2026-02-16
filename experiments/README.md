@@ -35,9 +35,14 @@ experiments/
 
 ## Quick Start
 
+0. Sync dependencies (uv):
+```bash
+uv sync --extra experiments
+```
+
 1. Create baseline artifacts (v0 freeze):
 ```bash
-python experiments/src/run_v0_freeze.py \
+uv run python experiments/src/run_v0_freeze.py \
   --sketch_path experiments/fixtures/sketches/example.png \
   --hints_path experiments/fixtures/hints/example.txt \
   --layout_input json/living_room2_layout_gpt-5.2_202601291702.json \
@@ -48,7 +53,7 @@ python experiments/src/run_v0_freeze.py \
 
 2. Compare reproducibility:
 ```bash
-python experiments/src/compare_layout.py \
+uv run python experiments/src/compare_layout.py \
   --layout_a experiments/runs/demo_v0/layout_v0.json \
   --layout_b experiments/runs/demo_v0/layout_v0.json \
   --out experiments/runs/demo_v0/compare_report.json
@@ -56,7 +61,7 @@ python experiments/src/compare_layout.py \
 
 3. Evaluate metrics:
 ```bash
-python experiments/src/eval_metrics.py \
+uv run python experiments/src/eval_metrics.py \
   --layout experiments/runs/demo_v0/layout_v0.json \
   --config experiments/configs/eval/default_eval.json \
   --out experiments/runs/demo_v0/metrics.json \
@@ -65,7 +70,7 @@ python experiments/src/eval_metrics.py \
 
 4. Run one trial:
 ```bash
-python experiments/src/run_trial.py \
+uv run python experiments/src/run_trial.py \
   --trial_config experiments/configs/trials/sample_exp_a.json \
   --eval_config experiments/configs/eval/default_eval.json \
   --out_root experiments/results
