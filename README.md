@@ -134,14 +134,26 @@ USD Search Placerは、NVIDIA Omniverse Isaac Sim向けの拡張機能で、2D�
 
 ### 依存関係のインストール
 
-拡張機能は以下のPythonパッケージを使用します（`config/extension.toml`で自動インストールされます）：
+このリポジトリでは **uv管理** を推奨します。依存定義は `pyproject.toml`、ロックは `uv.lock` です。
+
+1. uv のインストール（未導入時）
+   - Linux/WSL:
+     ```bash
+     curl -LsSf https://astral.sh/uv/install.sh | sh
+     ```
+2. 依存同期（実験用追加依存を含む）
+   ```bash
+   uv sync --extra experiments
+   ```
+
+拡張機能で使う主なPythonパッケージ：
 
 - `opencv-python==4.10.0.84`
 - `openai`
 - `pillow`
 - `numpy>=1.21.2`
 
-自動インストールが失敗する場合は、手動でインストール：
+Isaac Sim の Kit Python 側で自動インストールが失敗する場合のみ、次の手動インストールを使用してください（ランタイム救済手順）：
 
 ```powershell
 # Windows
