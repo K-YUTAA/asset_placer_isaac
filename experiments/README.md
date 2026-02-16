@@ -119,6 +119,10 @@ python experiments/src/run_trial.py \
     - `occupancy.pgm`: 家具占有（0=占有, 255=free）
     - `reachability.pgm`: 到達可能性 + 経路の簡易可視化
     - `task_points.json`: start/goal の解決結果（`eval.task` 有効時）
+    - `ooe_occ_sense.pgm`: センサー高さでの遮蔽グリッド（`entry_observability` 有効時）
+    - `ooe_obj_id.json`: OOE対象物体のID/カテゴリ/高さ情報
+    - `ooe_hits.json`: first-hit レイ集計（`p_hit` と hit counts）
+    - `ooe_surface.json`: surface proxy 集計（`v_surf` と可視側面積）
 
 ### `task_points.py`（タスク点の解決）
 
@@ -200,6 +204,45 @@ $$
 C_{vis} = \\frac{|Visible|}{|Free|}
 $$
 
+### `C_vis_start`（入室直後の床面見通し）
+
+start 点のみを観測点に固定した可視化率です（`occ` は非 inflate）:
+
+$$
+C_{vis,start} = \\frac{|V(start)|}{|F|}, \\quad F = \\{x \\mid room\\_mask(x)=1 \\land occ(x)=0\\}
+$$
+
+### `OOE`（Entry Observability）
+
+`entry_observability.enabled=true` のとき、入室直後 start から家具把握度を追加計算します。
+
+- first-hit（LiDAR風）
+$$
+p_i = \\frac{1}{K}\\sum_{k=1}^{K}\\mathbf{1}[o_k=i]
+$$
+$$
+OOE\\_C^{hit} = \\frac{\\sum_i w_i p_i}{\\sum_i w_i},\\quad
+OOE\\_R^{hit} = \\frac{1}{|\\mathcal{I}|}\\sum_i\\mathbf{1}[p_i \\ge \\tau_p]
+$$
+
+- surface（境界サンプル）
+$$
+v_i = \\frac{\\sum_{b\\in\\partial O_i} visible(b)}{|\\partial O_i|}
+$$
+$$
+A^{side}_i \\approx 2(L_i+W_i)H_i,\\quad A^{vis}_i \\approx A^{side}_i v_i
+$$
+$$
+OOE\\_C^{surf} = \\frac{\\sum_i w_i v_i}{\\sum_i w_i},\\quad
+OOE\\_R^{surf} = \\frac{1}{|\\mathcal{I}|}\\sum_i\\mathbf{1}[v_i \\ge \\tau_v]
+$$
+
+実装のメトリクスキー:
+- `C_vis_start`
+- `OOE_C_obj_entry_hit`, `OOE_R_rec_entry_hit`
+- `OOE_C_obj_entry_surf`, `OOE_R_rec_entry_surf`
+- `OOE_per_object`（`p_hit`, `v_surf`, `visible_side_area_m2` を保持）
+
 ### `Delta_layout`（レイアウト変更量）
 
 baseline と現在の movable 物体集合を $\\mathcal{M}$ とし、物体 $i$ の平面移動量 $\\Delta p_i$、
@@ -216,6 +259,28 @@ $$
 $$
 Adopt = \\mathbb{1}[R_{reach} \\ge \\tau_R \\land clr_{min} \\ge \\tau_{clr} \\land C_{vis} \\ge \\tau_V \\land \\Delta_{layout} \\le \\tau_{\\Delta}]
 $$
+
+### `entry_observability` 設定例
+
+```json
+{
+  "entry_observability": {
+    "enabled": true,
+    "mode": "both",
+    "sensor_height_m": 0.6,
+    "num_rays": 720,
+    "max_range_m": 10.0,
+    "tau_p": 0.02,
+    "tau_v": 0.30,
+    "exclude_categories": ["floor", "door", "window"],
+    "target_categories": [],
+    "height_by_category_m": {
+      "chair": 0.9,
+      "table": 0.75
+    }
+  }
+}
+```
 
 ## Notes
 

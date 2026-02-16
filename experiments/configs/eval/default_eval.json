@@ -23,5 +23,17 @@
   "tau_clr": 0.20,
   "tau_V": 0.40,
   "tau_Delta": 0.15,
-  "lambda_rot": 0.50
+  "lambda_rot": 0.50,
+  "entry_observability": {
+    "enabled": false,
+    "mode": "both",
+    "exclude_categories": ["floor", "door", "window"],
+    "target_categories": [],
+    "height_by_category_m": {},
+    "sensor_height_m": 0.60,
+    "num_rays": 720,
+    "max_range_m": 10.0,
+    "tau_p": 0.02,
+    "tau_v": 0.30
+  }
 }

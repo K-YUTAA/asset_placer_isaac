@@ -23,6 +23,8 @@ import task_points
 
 Grid = List[List[bool]]
 Cell = Tuple[int, int]
+WALL_HIT_ID = -1
+NONE_HIT_ID = 0
 
 
 def default_eval_config() -> Dict[str, Any]:
@@ -38,6 +40,18 @@ def default_eval_config() -> Dict[str, Any]:
         "tau_V": 0.40,
         "tau_Delta": 0.15,
         "lambda_rot": 0.50,
+        "entry_observability": {
+            "enabled": False,
+            "mode": "both",
+            "exclude_categories": ["floor", "door", "window"],
+            "target_categories": [],
+            "height_by_category_m": {},
+            "sensor_height_m": 0.60,
+            "num_rays": 720,
+            "max_range_m": 10.0,
+            "tau_p": 0.02,
+            "tau_v": 0.30,
+        },
     }
 
 
@@ -45,6 +59,11 @@ def merge_eval_config(base: Dict[str, Any], update: Optional[Dict[str, Any]]) ->
     merged = dict(base)
     if update:
         merged.update(update)
+        if isinstance(base.get("entry_observability"), dict):
+            eo = dict(base.get("entry_observability") or {})
+            if isinstance(update.get("entry_observability"), dict):
+                eo.update(update.get("entry_observability") or {})
+            merged["entry_observability"] = eo
     return merged
 
 
@@ -313,6 +332,316 @@ def _sample_path_cells(path: List[Cell], sample_step_m: float, resolution: float
     return sampled
 
 
+def _to_lower_set(values: Any) -> set[str]:
+    if not isinstance(values, list):
+        return set()
+    out: set[str] = set()
+    for v in values:
+        text = str(v or "").strip().lower()
+        if text:
+            out.add(text)
+    return out
+
+
+def _resolve_object_height_m(obj: Dict[str, Any], height_by_category_m: Dict[str, float]) -> float:
+    size = obj.get("size_lwh_m") or [1.0, 1.0, 1.0]
+    raw_h = as_float(size[2] if len(size) > 2 else 0.0, 0.0)
+    if raw_h > 1e-9:
+        return raw_h
+
+    category = str(obj.get("category") or "").strip().lower()
+    fallback_h = as_float(height_by_category_m.get(category), 0.0)
+    if fallback_h > 1e-9:
+        return fallback_h
+    return 1.0
+
+
+def _collect_entry_target_objects(
+    layout: Dict[str, Any],
+    entry_cfg: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    exclude_categories = _to_lower_set(entry_cfg.get("exclude_categories"))
+    target_categories = _to_lower_set(entry_cfg.get("target_categories"))
+    has_target_filter = len(target_categories) > 0
+
+    raw_height_map = entry_cfg.get("height_by_category_m")
+    raw_height_map = raw_height_map if isinstance(raw_height_map, dict) else {}
+    height_by_category_m = {str(k).strip().lower(): as_float(v, 0.0) for k, v in raw_height_map.items()}
+
+    targets: List[Dict[str, Any]] = []
+    for idx, obj in enumerate(layout.get("objects", [])):
+        if not isinstance(obj, dict):
+            continue
+
+        category = str(obj.get("category") or "").strip().lower()
+        if category in exclude_categories:
+            continue
+        if has_target_filter and category not in target_categories:
+            continue
+
+        obj_id = str(obj.get("id") or f"obj_{idx:02d}")
+        size = obj.get("size_lwh_m") or [1.0, 1.0, 1.0]
+        length = max(1e-6, as_float(size[0] if len(size) > 0 else 1.0, 1.0))
+        width = max(1e-6, as_float(size[1] if len(size) > 1 else 1.0, 1.0))
+        height = _resolve_object_height_m(obj, height_by_category_m)
+        side_area = 2.0 * (length + width) * height
+        weight = max(1e-6, length * width)
+
+        targets.append(
+            {
+                "obj": obj,
+                "id": obj_id,
+                "category": category or "unknown",
+                "height_m": height,
+                "length_m": length,
+                "width_m": width,
+                "side_area_m2": max(1e-6, side_area),
+                "weight": weight,
+            }
+        )
+
+    targets.sort(key=lambda x: x["id"])
+    return targets
+
+
+def _compute_visible_free_from_start(
+    start_cell: Cell,
+    free_mask_raw: Grid,
+    occ: Grid,
+    room_mask: Grid,
+) -> Tuple[Grid, int, int]:
+    ny = len(free_mask_raw)
+    nx = len(free_mask_raw[0]) if ny > 0 else 0
+    visible_free = _make_grid(nx, ny, False)
+
+    free_total = 0
+    visible_total = 0
+    for iy in range(ny):
+        for ix in range(nx):
+            if not free_mask_raw[iy][ix]:
+                continue
+            free_total += 1
+            if _line_of_sight_clear(start_cell, (ix, iy), occ, room_mask):
+                visible_free[iy][ix] = True
+                visible_total += 1
+
+    return visible_free, free_total, visible_total
+
+
+def _build_occ_sense_and_obj_id_grid(
+    target_objects: List[Dict[str, Any]],
+    bounds: Tuple[float, float, float, float],
+    resolution: float,
+    room_mask: Grid,
+    sensor_height_m: float,
+) -> Tuple[Grid, List[List[int]], Dict[int, Dict[str, Any]]]:
+    ny = len(room_mask)
+    nx = len(room_mask[0]) if ny > 0 else 0
+    occ_sense = _make_grid(nx, ny, False)
+    obj_id_grid: List[List[int]] = [[0 for _ in range(nx)] for _ in range(ny)]
+
+    sensed_objects = [o for o in target_objects if as_float(o.get("height_m"), 0.0) + 1e-9 >= sensor_height_m]
+
+    id_to_meta: Dict[int, Dict[str, Any]] = {}
+    for grid_id, target in enumerate(sensed_objects, start=1):
+        id_to_meta[grid_id] = {
+            "id": target["id"],
+            "category": target["category"],
+            "height_m": as_float(target.get("height_m"), 1.0),
+            "weight": as_float(target.get("weight"), 1.0),
+        }
+
+    for iy in range(ny):
+        for ix in range(nx):
+            if not room_mask[iy][ix]:
+                continue
+            x, y = _cell_center(ix, iy, bounds, resolution)
+            for grid_id, target in enumerate(sensed_objects, start=1):
+                if point_in_obb(x, y, target["obj"]):
+                    occ_sense[iy][ix] = True
+                    obj_id_grid[iy][ix] = grid_id
+                    break
+
+    return occ_sense, obj_id_grid, id_to_meta
+
+
+def _raycast_first_hit(
+    sensor_cell: Cell,
+    end_cell: Cell,
+    occ_sense: Grid,
+    obj_id_grid: List[List[int]],
+    room_mask: Grid,
+) -> int:
+    ny = len(room_mask)
+    nx = len(room_mask[0]) if ny > 0 else 0
+    for idx, (x, y) in enumerate(_bresenham_line(sensor_cell, end_cell)):
+        if idx == 0:
+            continue
+        if x < 0 or y < 0 or x >= nx or y >= ny:
+            return WALL_HIT_ID
+        if not room_mask[y][x]:
+            return WALL_HIT_ID
+        if occ_sense[y][x]:
+            obj_id = obj_id_grid[y][x]
+            return obj_id if obj_id > 0 else WALL_HIT_ID
+    return NONE_HIT_ID
+
+
+def _compute_entry_observability_first_hit(
+    start_cell: Cell,
+    bounds: Tuple[float, float, float, float],
+    resolution: float,
+    occ_sense: Grid,
+    obj_id_grid: List[List[int]],
+    room_mask: Grid,
+    id_to_meta: Dict[int, Dict[str, Any]],
+    entry_cfg: Dict[str, Any],
+) -> Tuple[Dict[str, float], Dict[str, Dict[str, Any]], Dict[str, Any]]:
+    num_rays = max(1, int(entry_cfg.get("num_rays", 720)))
+    tau_p = as_float(entry_cfg.get("tau_p"), 0.02)
+    max_range_default = math.hypot(bounds[2] - bounds[0], bounds[3] - bounds[1])
+    max_range_m = as_float(entry_cfg.get("max_range_m"), max_range_default)
+    max_range_cells = max(1, int(math.ceil(max_range_m / max(1e-9, resolution))))
+
+    hit_counts: Dict[int, int] = {grid_id: 0 for grid_id in id_to_meta.keys()}
+    wall_hits = 0
+    none_hits = 0
+    sampled_rays: List[Dict[str, Any]] = []
+    sample_stride = max(1, num_rays // 36)
+
+    sx, sy = start_cell
+    for k in range(num_rays):
+        alpha = (2.0 * math.pi * float(k)) / float(num_rays)
+        ex = sx + int(round(math.cos(alpha) * max_range_cells))
+        ey = sy + int(round(math.sin(alpha) * max_range_cells))
+        hit_id = _raycast_first_hit(start_cell, (ex, ey), occ_sense, obj_id_grid, room_mask)
+        if hit_id == WALL_HIT_ID:
+            wall_hits += 1
+        elif hit_id == NONE_HIT_ID:
+            none_hits += 1
+        else:
+            hit_counts[hit_id] = hit_counts.get(hit_id, 0) + 1
+
+        if (k % sample_stride) == 0:
+            sampled_rays.append({"index": k, "end_cell": [ex, ey], "hit_id": int(hit_id)})
+
+    weighted_sum = 0.0
+    weight_total = 0.0
+    recognized = 0
+    per_object: Dict[str, Dict[str, Any]] = {}
+    p_hit_by_object: Dict[str, float] = {}
+    hit_counts_by_object: Dict[str, int] = {}
+
+    for grid_id, meta in id_to_meta.items():
+        obj_id = str(meta.get("id") or f"obj_{grid_id:02d}")
+        p_hit = hit_counts.get(grid_id, 0) / float(num_rays)
+        weight = max(1e-6, as_float(meta.get("weight"), 1.0))
+        weighted_sum += weight * p_hit
+        weight_total += weight
+        if p_hit >= tau_p:
+            recognized += 1
+
+        per_object[obj_id] = {"p_hit": p_hit}
+        p_hit_by_object[obj_id] = p_hit
+        hit_counts_by_object[obj_id] = int(hit_counts.get(grid_id, 0))
+
+    obj_count = len(id_to_meta)
+    metrics = {
+        "OOE_C_obj_entry_hit": (weighted_sum / weight_total) if weight_total > 0.0 else 0.0,
+        "OOE_R_rec_entry_hit": (recognized / float(obj_count)) if obj_count > 0 else 0.0,
+    }
+    debug = {
+        "num_rays": num_rays,
+        "tau_p": tau_p,
+        "wall_hits": wall_hits,
+        "none_hits": none_hits,
+        "hit_counts": hit_counts_by_object,
+        "p_hit": p_hit_by_object,
+        "sampled_rays": sampled_rays,
+    }
+    return metrics, per_object, debug
+
+
+def _compute_entry_observability_surface(
+    target_objects: List[Dict[str, Any]],
+    room_mask: Grid,
+    bounds: Tuple[float, float, float, float],
+    resolution: float,
+    visible_free: Grid,
+    entry_cfg: Dict[str, Any],
+) -> Tuple[Dict[str, float], Dict[str, Dict[str, Any]], Dict[str, Any]]:
+    ny = len(room_mask)
+    nx = len(room_mask[0]) if ny > 0 else 0
+    tau_v = as_float(entry_cfg.get("tau_v"), 0.30)
+
+    weighted_sum = 0.0
+    weight_total = 0.0
+    recognized = 0
+    per_object: Dict[str, Dict[str, Any]] = {}
+    surface_debug_objects: List[Dict[str, Any]] = []
+
+    for target in target_objects:
+        obj = target["obj"]
+        occ_cells: set[Cell] = set()
+        for iy in range(ny):
+            for ix in range(nx):
+                if not room_mask[iy][ix]:
+                    continue
+                x, y = _cell_center(ix, iy, bounds, resolution)
+                if point_in_obb(x, y, obj):
+                    occ_cells.add((ix, iy))
+
+        boundary_cells: List[Cell] = []
+        for ix, iy in occ_cells:
+            for tx, ty in _neighbors4(ix, iy, nx, ny):
+                if (tx, ty) not in occ_cells:
+                    boundary_cells.append((ix, iy))
+                    break
+
+        visible_boundary = 0
+        for ix, iy in boundary_cells:
+            visible = False
+            for tx, ty in _neighbors4(ix, iy, nx, ny):
+                if visible_free[ty][tx]:
+                    visible = True
+                    break
+            if visible:
+                visible_boundary += 1
+
+        boundary_count = len(boundary_cells)
+        v_surf = (visible_boundary / float(boundary_count)) if boundary_count > 0 else 0.0
+
+        side_area = max(1e-6, as_float(target.get("side_area_m2"), 1.0))
+        visible_side_area = side_area * v_surf
+        weight = max(1e-6, as_float(target.get("weight"), 1.0))
+
+        weighted_sum += weight * v_surf
+        weight_total += weight
+        if v_surf >= tau_v:
+            recognized += 1
+
+        obj_id = str(target.get("id") or "")
+        per_object[obj_id] = {"v_surf": v_surf, "visible_side_area_m2": visible_side_area}
+        surface_debug_objects.append(
+            {
+                "id": obj_id,
+                "category": target.get("category"),
+                "boundary_cells": boundary_count,
+                "visible_boundary_cells": visible_boundary,
+                "v_surf": v_surf,
+                "visible_side_area_m2": visible_side_area,
+            }
+        )
+
+    obj_count = len(target_objects)
+    metrics = {
+        "OOE_C_obj_entry_surf": (weighted_sum / weight_total) if weight_total > 0.0 else 0.0,
+        "OOE_R_rec_entry_surf": (recognized / float(obj_count)) if obj_count > 0 else 0.0,
+    }
+    debug = {"tau_v": tau_v, "objects": surface_debug_objects}
+    return metrics, per_object, debug
+
+
 def _compute_delta_layout(
     layout: Dict[str, Any],
     baseline_layout: Optional[Dict[str, Any]],
@@ -441,6 +770,89 @@ def evaluate_layout(
     c_vis = (visible_count / free_total) if free_total > 0 else 0.0
     delta_layout = _compute_delta_layout(layout, baseline_layout, as_float(config.get("lambda_rot"), 0.50))
 
+    entry_cfg = config.get("entry_observability")
+    entry_cfg = entry_cfg if isinstance(entry_cfg, dict) else {}
+    entry_enabled = bool(entry_cfg.get("enabled", False))
+    entry_mode = str(entry_cfg.get("mode") or "both").strip().lower()
+    if entry_mode not in {"first_hit", "surface", "both"}:
+        entry_mode = "both"
+
+    c_vis_start = 0.0
+    ooe_c_hit = 0.0
+    ooe_r_hit = 0.0
+    ooe_c_surf = 0.0
+    ooe_r_surf = 0.0
+    ooe_per_object: List[Dict[str, Any]] = []
+    entry_debug: Dict[str, Any] = {}
+    if entry_enabled and 0 <= start[0] < nx and 0 <= start[1] < ny:
+        free_mask_raw = _build_free_mask(room_mask, occ)
+        visible_free, free_raw_total, visible_raw_total = _compute_visible_free_from_start(start, free_mask_raw, occ, room_mask)
+        c_vis_start = (visible_raw_total / free_raw_total) if free_raw_total > 0 else 0.0
+
+        target_objects = _collect_entry_target_objects(layout, entry_cfg)
+        per_object_map: Dict[str, Dict[str, Any]] = {
+            str(target["id"]): {
+                "id": str(target["id"]),
+                "category": target["category"],
+                "p_hit": 0.0,
+                "v_surf": 0.0,
+                "visible_side_area_m2": 0.0,
+                "height_m": as_float(target.get("height_m"), 1.0),
+            }
+            for target in target_objects
+        }
+
+        if entry_mode in {"first_hit", "both"}:
+            sensor_height_m = as_float(entry_cfg.get("sensor_height_m"), 0.60)
+            occ_sense, obj_id_grid, id_to_meta = _build_occ_sense_and_obj_id_grid(
+                target_objects=target_objects,
+                bounds=bounds,
+                resolution=resolution,
+                room_mask=room_mask,
+                sensor_height_m=sensor_height_m,
+            )
+            first_hit_metrics, first_hit_per_obj, first_hit_debug = _compute_entry_observability_first_hit(
+                start_cell=start,
+                bounds=bounds,
+                resolution=resolution,
+                occ_sense=occ_sense,
+                obj_id_grid=obj_id_grid,
+                room_mask=room_mask,
+                id_to_meta=id_to_meta,
+                entry_cfg=entry_cfg,
+            )
+            ooe_c_hit = first_hit_metrics["OOE_C_obj_entry_hit"]
+            ooe_r_hit = first_hit_metrics["OOE_R_rec_entry_hit"]
+            for obj_id, item in first_hit_per_obj.items():
+                if obj_id in per_object_map:
+                    per_object_map[obj_id].update(item)
+            entry_debug["occ_sense"] = occ_sense
+            entry_debug["obj_id_meta"] = {str(k): v for k, v in id_to_meta.items()}
+            entry_debug["first_hit"] = first_hit_debug
+
+        if entry_mode in {"surface", "both"}:
+            surface_metrics, surface_per_obj, surface_debug = _compute_entry_observability_surface(
+                target_objects=target_objects,
+                room_mask=room_mask,
+                bounds=bounds,
+                resolution=resolution,
+                visible_free=visible_free,
+                entry_cfg=entry_cfg,
+            )
+            ooe_c_surf = surface_metrics["OOE_C_obj_entry_surf"]
+            ooe_r_surf = surface_metrics["OOE_R_rec_entry_surf"]
+            for obj_id, item in surface_per_obj.items():
+                if obj_id in per_object_map:
+                    per_object_map[obj_id].update(item)
+            entry_debug["surface"] = surface_debug
+
+        ooe_per_object = [per_object_map[obj_id] for obj_id in sorted(per_object_map.keys())]
+        entry_debug["enabled"] = True
+        entry_debug["mode"] = entry_mode
+        entry_debug["C_vis_start"] = c_vis_start
+        entry_debug["free_total_raw"] = free_raw_total
+        entry_debug["visible_total_raw"] = visible_raw_total
+
     tau_r = as_float(config.get("tau_R"), 0.90)
     tau_clr = as_float(config.get("tau_clr"), 0.20)
     tau_v = as_float(config.get("tau_V"), 0.40)
@@ -462,6 +874,12 @@ def evaluate_layout(
         "Adopt": adopt,
         "validity": validity,
         "runtime_sec": runtime_sec,
+        "C_vis_start": c_vis_start,
+        "OOE_C_obj_entry_hit": ooe_c_hit,
+        "OOE_R_rec_entry_hit": ooe_r_hit,
+        "OOE_C_obj_entry_surf": ooe_c_surf,
+        "OOE_R_rec_entry_surf": ooe_r_surf,
+        "OOE_per_object": ooe_per_object,
     }
 
     debug = {
@@ -480,6 +898,8 @@ def evaluate_layout(
     }
     if task_points_debug is not None:
         debug["task_points"] = task_points_debug
+    if entry_debug:
+        debug["entry_observability"] = entry_debug
 
     return metrics, debug
 
@@ -519,6 +939,26 @@ def _save_debug_maps(debug: Dict[str, Any], out_dir: pathlib.Path) -> None:
     _grid_to_pgm(out_dir / "reachability.pgm", reach_img)
     if debug.get("task_points") is not None:
         write_json(out_dir / "task_points.json", debug["task_points"])
+    entry_debug = debug.get("entry_observability")
+    if isinstance(entry_debug, dict):
+        occ_sense = entry_debug.get("occ_sense")
+        if isinstance(occ_sense, list) and occ_sense:
+            ooe_occ_img = [[128 for _ in range(nx)] for _ in range(ny)]
+            for iy in range(ny):
+                for ix in range(nx):
+                    if not room_mask[iy][ix]:
+                        continue
+                    ooe_occ_img[iy][ix] = 0 if bool(occ_sense[iy][ix]) else 255
+            _grid_to_pgm(out_dir / "ooe_occ_sense.pgm", ooe_occ_img)
+        if entry_debug.get("obj_id_meta") is not None:
+            write_json(out_dir / "ooe_obj_id.json", {"objects": entry_debug.get("obj_id_meta")})
+        if entry_debug.get("first_hit") is not None:
+            write_json(out_dir / "ooe_hits.json", entry_debug.get("first_hit"))
+            first_hit = entry_debug.get("first_hit")
+            if isinstance(first_hit, dict) and first_hit.get("sampled_rays") is not None:
+                write_json(out_dir / "ooe_rays.json", {"sampled_rays": first_hit.get("sampled_rays")})
+        if entry_debug.get("surface") is not None:
+            write_json(out_dir / "ooe_surface.json", entry_debug.get("surface"))
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
