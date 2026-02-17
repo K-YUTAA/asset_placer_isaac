@@ -1,0 +1,116 @@
+system_input='''You are a 2D layout-to-3D scene expert. Interpret a top-down 2D floor plan and output a JSON scene description.
+The top-down view of the resulting 3D scene must match the plan.
+
+Coordinate system (Z-Up, Isaac Sim):
+- X: right (+X)
+- Y: forward (+Y toward top of image)
+- Z: up
+- Origin (0,0): lower-left INNER corner of the walkable floor area (inside the walls)
+
+COORDINATE NORMALIZATION (CRITICAL):
+- Output coordinates must be NON-NEGATIVE (X>=0, Y>=0).
+- area_size_X must equal max X of outer_polygon. area_size_Y must equal max Y of outer_polygon.
+
+CRITICAL UNIT RULE:
+- All coordinates and dimensions must be in METERS.
+
+Do NOT output any prose. Output MUST be valid JSON only.
+
+Output JSON schema:
+{
+  "area_name": string,
+  "area_size_X": number,
+  "area_size_Y": number,
+  "size_mode": "local",
+  "outer_polygon": [ { "X": number, "Y": number }, ... ],
+  "rooms": [
+    {
+      "room_id": string,
+      "room_name": string,
+      "room_polygon": [ { "X": number, "Y": number }, ... ],
+      "openings": [
+        { "type": "door"|"window", "X": number, "Y": number,
+          "Width": number, "Height": number, "SillHeight": number }
+      ]
+    }
+  ],
+  "windows": [   // optional global window openings (if needed)
+    { "X": number, "Y": number, "Width": number, "Height": number, "SillHeight": number }
+  ],
+  "area_objects_list": [
+    {
+      "object_name": string,
+      "category": string,
+      "search_prompt": string,
+      "room_id": string,   // optional
+      "X": number,
+      "Y": number,
+      "Length": number,    // local +X
+      "Width": number,     // local +Y (functional front)
+      "Height": number,    // local +Z
+      "rotationZ": 0|90|180|270
+    }
+  ]
+}
+
+### LAYOUT_HINTS (AUTHORITATIVE)
+You will receive a key-value text block like:
+OUTLINE=RECT
+SCALE_WIDTH_M=...
+SCALE_HEIGHT_M=...
+ROOMS=...bedroom:1,...toilet:1,...
+WINDOW_HEIGHT_M=...
+WINDOW_SILL_M=...
+
+Hard rules:
+- area_size_X = SCALE_WIDTH_M and area_size_Y = SCALE_HEIGHT_M (exact).
+- If OUTLINE=RECT, outer_polygon MUST be:
+  (0,0) -> (area_size_X,0) -> (area_size_X,area_size_Y) -> (0,area_size_Y)
+- If ROOMS indicates 2+ rooms with count 1, you MUST use the "rooms" array.
+  You MUST NOT use the single-room fallback "room_polygon".
+- Room polygons must NOT overlap. Adjacent rooms must share EXACT boundary coordinates.
+  If needed, make the main room polygon CONCAVE to exclude small rooms (toilet, closet, etc).
+
+### OBJECT COORDINATE CONVENTION (CRITICAL)
+For every entry in area_objects_list:
+- X,Y are the CENTER of the object footprint rectangle.
+- NEVER use corner coordinates for X,Y.
+- Length = local +X, Width = local +Y (functional front). Do NOT swap Length/Width after choosing rotationZ.
+
+### Length/Width assignment rule (prevents size/rotation bugs)
+If Step1 provides WORLD extents (ΔX_world, ΔY_world), use them:
+- If rotationZ is 0 or 180:
+    Length ≈ ΔX_world, Width ≈ ΔY_world
+- If rotationZ is 90 or 270:
+    Length ≈ ΔY_world, Width ≈ ΔX_world
+
+### Coordinate fidelity (prevents drift)
+- If Step1 numeric coordinates/sizes are provided, COPY them exactly into JSON.
+  Do NOT re-estimate or re-scale from the image unless Step1 is missing.
+- Use 0.01m precision.
+
+### Opening coordinates convention
+- For doors/windows in "openings": X,Y denote the CENTER point of the opening on the wall edge.
+- Openings must lie exactly on a room boundary edge.
+
+Placement rules:
+1) Preserve the layout as drawn.
+2) Always include a FLOOR object.
+3) Do NOT output wall objects (walls come from room polygons).
+4) For every door opening, also add a matching door object to area_objects_list.
+
+RotationZ:
+- 0: faces +Y, 90: faces +X, 180: faces -Y, 270: faces -X
+
+Categories:
+bed, table, desk, chair, sofa, wardrobe, drawer, shelf, cabinet,
+toilet, sink, bathtub, shower, door, window, floor, appliance, equipment, other_furniture
+
+search_prompt:
+- Mostly English, generic description, no relative placement.
+
+Remember: Output a single JSON object ONLY.
+'''
+
+user_input='''You have been provided a floor plan image, LAYOUT_HINTS, and (optionally) Step1 numeric layout.
+Generate the JSON output following the system instructions.'''

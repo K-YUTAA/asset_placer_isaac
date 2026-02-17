@@ -1,7 +1,7 @@
 ﻿# LAYOUT_HINTS
 OUTLINE=RECT
-SCALE_WIDTH_M=5.93
-SCALE_HEIGHT_M=3.04
+SCALE_WIDTH_M=3.04
+SCALE_HEIGHT_M=5.93
 ROOMS=ldk:0,living:0,dining:0,kitchen:0,bedroom:1,kids_room:0,study:0,bathroom:0,toilet:1,washroom:0,closet:0,storage:0,hallway:0,entrance:0,garage:0,balcony:0,laundry:0,pantry:0,utility:0,office:0,guest_room:0
 DOOR_COUNT=2
 WINDOW_COUNT=1

@@ -99,6 +99,68 @@ def _build_room(raw: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _normalize_polygon_points(raw_poly: Any) -> List[List[float]]:
+    points: List[List[float]] = []
+    if not isinstance(raw_poly, list):
+        return points
+    for p in raw_poly:
+        if isinstance(p, dict):
+            x = as_float(p.get("X", p.get("x", 0.0)), 0.0)
+            y = as_float(p.get("Y", p.get("y", 0.0)), 0.0)
+            points.append([x, y])
+        elif isinstance(p, (list, tuple)) and len(p) >= 2:
+            points.append([as_float(p[0], 0.0), as_float(p[1], 0.0)])
+    return points
+
+
+def _extract_rooms(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
+    raw_rooms = raw.get("rooms")
+    if not isinstance(raw_rooms, list):
+        return []
+
+    rooms: List[Dict[str, Any]] = []
+    for idx, room in enumerate(raw_rooms):
+        if not isinstance(room, dict):
+            continue
+        room_id = str(room.get("room_id") or room.get("room_name") or f"room_{idx+1}")
+        room_name = str(room.get("room_name") or room_id)
+
+        raw_poly = room.get("room_polygon")
+        if not isinstance(raw_poly, list):
+            raw_poly = room.get("boundary_poly_xy")
+        poly = _normalize_polygon_points(raw_poly)
+        if len(poly) < 3:
+            continue
+
+        openings: List[Dict[str, Any]] = []
+        raw_openings = room.get("openings")
+        if isinstance(raw_openings, list):
+            for opening in raw_openings:
+                if not isinstance(opening, dict):
+                    continue
+                openings.append(
+                    {
+                        "type": str(opening.get("type") or "opening"),
+                        "X": as_float(opening.get("X", opening.get("x", 0.0)), 0.0),
+                        "Y": as_float(opening.get("Y", opening.get("y", 0.0)), 0.0),
+                        "Width": as_float(opening.get("Width", opening.get("width", 0.0)), 0.0),
+                        "Height": as_float(opening.get("Height", opening.get("height", 0.0)), 0.0),
+                        "SillHeight": as_float(opening.get("SillHeight", opening.get("sillHeight", 0.0)), 0.0),
+                    }
+                )
+
+        rooms.append(
+            {
+                "room_id": room_id,
+                "room_name": room_name,
+                "room_polygon": poly,
+                "openings": openings,
+            }
+        )
+
+    return rooms
+
+
 def _map_extension_object(raw_obj: Dict[str, Any]) -> Dict[str, Any]:
     category = str(
         raw_obj.get("category")
@@ -178,6 +240,7 @@ def _normalize_ids(objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def normalize_layout(raw_layout: Dict[str, Any], layout_id: str | None = None, source: str = "v0") -> Dict[str, Any]:
     room = _build_room(raw_layout)
+    rooms = _extract_rooms(raw_layout)
 
     raw_objects: List[Dict[str, Any]] = []
     if isinstance(raw_layout.get("objects"), list):
@@ -204,6 +267,7 @@ def normalize_layout(raw_layout: Dict[str, Any], layout_id: str | None = None, s
             "timestamp": utc_now_iso(),
         },
         "room": room,
+        "rooms": rooms,
         "objects": objects,
     }
 

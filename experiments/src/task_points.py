@@ -178,19 +178,31 @@ def _bedside_candidates_xy(bed_obj: Dict[str, Any], offset_m: float) -> List[Tup
     y = as_float(pose[1] if len(pose) > 1 else 0.0, 0.0)
     yaw = as_float(pose[3] if len(pose) > 3 else 0.0, 0.0)
 
+    length = as_float(size[0] if len(size) > 0 else 1.0, 1.0)
     width = as_float(size[1] if len(size) > 1 else 1.0, 1.0)
-    d = 0.5 * width + max(0.0, float(offset_m))
 
     cos_y = math.cos(yaw)
     sin_y = math.sin(yaw)
 
-    # Local +Y axis in world.
-    uyx = -sin_y
-    uyy = cos_y
+    # Local axes in world.
+    x_axis = (cos_y, sin_y)      # local +X
+    y_axis = (-sin_y, cos_y)     # local +Y
+
+    # g_bed candidates are generated from the two long-side edges.
+    # That means offsetting along the short-side normal.
+    if length >= width:
+        short_axis = y_axis
+        short_half = 0.5 * width
+    else:
+        short_axis = x_axis
+        short_half = 0.5 * length
+
+    d = short_half + max(0.0, float(offset_m))
+    sx, sy = short_axis
 
     return [
-        (x + uyx * d, y + uyy * d),
-        (x - uyx * d, y - uyy * d),
+        (x + sx * d, y + sy * d),
+        (x - sx * d, y - sy * d),
     ]
 
 
@@ -215,6 +227,13 @@ def resolve_task_points(
     default_goal_xy = config.get("goal_xy") or [5.0, 5.0]
 
     selectors: Dict[str, Any] = {"door_id": None, "bed_id": None}
+    anchors: Dict[str, Any] = {
+        "c": {"xy": [float(room_centroid[0]), float(room_centroid[1])], "label": "c"},
+        "t": None,
+        "s0": None,
+        "s": None,
+        "g_bed": None,
+    }
 
     # Start
     start_spec = task.get("start") if isinstance(task.get("start"), dict) else {}
@@ -226,6 +245,13 @@ def resolve_task_points(
         if door is not None:
             selectors["door_id"] = door.get("id")
             pose = door.get("pose_xyz_yaw") or [0.0, 0.0, 0.0, 0.0]
+            anchors["t"] = {
+                "xy": [
+                    as_float(pose[0] if len(pose) > 0 else 0.0, 0.0),
+                    as_float(pose[1] if len(pose) > 1 else 0.0, 0.0),
+                ],
+                "label": "t",
+            }
             dx = room_centroid[0] - as_float(pose[0] if len(pose) > 0 else 0.0, 0.0)
             dy = room_centroid[1] - as_float(pose[1] if len(pose) > 1 else 0.0, 0.0)
             norm = math.hypot(dx, dy)
@@ -234,10 +260,12 @@ def resolve_task_points(
             ux, uy = dx / norm, dy / norm
             in_offset_m = as_float(start_spec.get("in_offset_m"), 0.40)
             start_xy = [as_float(pose[0], 0.0) + ux * in_offset_m, as_float(pose[1], 0.0) + uy * in_offset_m]
+    anchors["s0"] = {"xy": [float(start_xy[0]), float(start_xy[1])], "label": "s0"}
 
     start_cell = _xy_to_cell(float(start_xy[0]), float(start_xy[1]), bounds, resolution)
     snapped_start_cell, moved_start = _snap_cell_to_free(start_cell, free_mask, max_radius_cells)
     snapped_start_xy = list(_cell_center(snapped_start_cell[0], snapped_start_cell[1], bounds, resolution))
+    anchors["s"] = {"xy": [float(snapped_start_xy[0]), float(snapped_start_xy[1])], "label": "s"}
 
     # Goal
     goal_spec = task.get("goal") if isinstance(task.get("goal"), dict) else {}
@@ -257,6 +285,7 @@ def resolve_task_points(
                 goal_xy = list(min(candidates, key=lambda p: (math.hypot(p[0] - cx, p[1] - cy), p[0], p[1])))
             else:
                 goal_xy = list(candidates[0])
+            anchors["g_bed"] = {"xy": [float(goal_xy[0]), float(goal_xy[1])], "label": "g_bed"}
 
     goal_cell = _xy_to_cell(float(goal_xy[0]), float(goal_xy[1]), bounds, resolution)
     snapped_goal_cell, moved_goal = _snap_cell_to_free(goal_cell, free_mask, max_radius_cells)
@@ -267,4 +296,5 @@ def resolve_task_points(
         "goal": {"mode": goal_mode or "manual", "xy": snapped_goal_xy, "cell": [snapped_goal_cell[0], snapped_goal_cell[1]]},
         "selectors": selectors,
         "snap": {"max_radius_cells": max_radius_cells, "moved_start": moved_start, "moved_goal": moved_goal},
+        "anchors": anchors,
     }

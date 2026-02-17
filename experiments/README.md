@@ -68,6 +68,15 @@ uv run python experiments/src/eval_metrics.py \
   --debug_dir experiments/runs/demo_v0/debug
 ```
 
+3.5. Plot metrics + task anchors (s0,s,t,c,g_bed):
+```bash
+uv run python experiments/src/plot_layout_json.py \
+  --layout experiments/runs/demo_v0/layout_v0.json \
+  --metrics_json experiments/runs/demo_v0/metrics.json \
+  --task_points_json experiments/runs/demo_v0/debug/task_points.json \
+  --out experiments/runs/demo_v0/plot_with_metrics_and_taskpoints.png
+```
+
 4. Run one trial:
 ```bash
 uv run python experiments/src/run_trial.py \
@@ -133,6 +142,12 @@ uv run python experiments/src/run_trial.py \
 
 - 役割: start/goal を「入口ドア」「ベッド脇」から自動決定し、freeセルへスナップします。
 - 有効化: eval config の `task` セクションが存在する場合（未指定なら従来の `start_xy/goal_xy`）。
+- 追加デバッグ出力:
+  - `anchors.c`: room centroid
+  - `anchors.t`: selected door center
+  - `anchors.s0`: start before snap
+  - `anchors.s`: snapped start
+  - `anchors.g_bed`: bedside goal candidate before snap
 
 ### `refine_heuristic.py`（改善ループ / 局所探索）
 

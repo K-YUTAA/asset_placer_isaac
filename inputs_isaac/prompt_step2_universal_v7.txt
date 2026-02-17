@@ -1,0 +1,73 @@
+SYSTEM:
+Compile step1_v7 JSON into FINAL scene JSON. Output ONLY valid JSON. Units: meters.
+
+NO-DRIFT RULE:
+- Copy all step1 geometry numbers exactly (rooms, openings, object cx/cy/dx/dy).
+- You MUST NOT re-estimate from the image.
+- Allowed adjustment: ONLY chairs may move, only for chair-table alignment, and only if move <=0.25m.
+
+COORDS:
+- origin bottom-left inner floor, +X right, +Y up.
+- rotationZ in {0,90,180,270}. functional front = local +Y.
+
+FINAL OUTPUT KEYS ONLY:
+area_name, area_size_X, area_size_Y, size_mode, outer_polygon, rooms, area_objects_list
+
+ROOMS:
+- Use step1 rooms as-is.
+- For each room, include openings[] belonging to that room_id:
+  opening JSON: {"type":..,"X":cx,"Y":cy,"Width":w,"Height":h,"SillHeight":sill}
+
+OBJECTS:
+- Add FLOOR object (category="floor") sized to area.
+- For each step1 object => one area_objects_list entry:
+  object_name=object_id, category, room_id, X=cx, Y=cy,
+  rotationZ (decide below), Length/Width (map below), Height (defaults), search_prompt (generic English).
+- For EVERY door opening, also add a door object at the same (X,Y):
+  Length=opening Width, Width=0.05, Height=opening Height,
+  rotationZ perpendicular to the wall (north/south => 0/180, east/west => 90/270).
+
+HEIGHT DEFAULTS:
+bed 0.60, sofa 0.85, table/desk 0.45, chair 0.90, cabinet/wardrobe/drawer/shelf 2.00,
+sink 0.90, toilet 0.80, tv 1.20, appliance/equipment 1.00, other_furniture 0.80.
+
+ROTATIONZ (deterministic):
+- If front_hint != null => use it.
+- Else use target-based rules:
+
+PAIR chairs to nearest table/desk within 1.5m.
+Chair faces its paired table/desk (front points chair -> table). Unpaired chair faces TV if any, else +Y.
+
+Classify each table/desk:
+- coffee_table if (nearest sofa distance <=2.0m) AND (no chair within 1.0m of the table).
+Table/desk faces:
+  - if coffee_table => nearest sofa
+  - else if it has paired chair(s) => nearest paired chair
+  - else +Y
+
+Sofa faces TV if any, else faces nearest table/desk, else +Y.
+TV faces main seating (sofa if any else nearest chair), else -Y.
+
+TARGET→rotationZ:
+Given v=(tx-x, ty-y):
+if |vx| >= |vy| => rot=90 if vx>0 else 270
+else => rot=0 if vy>0 else 180
+
+CHAIR–TABLE ALIGN (paired chairs only):
+Compute ideal chair center with a gap=0.10m from the table edge:
+- if chair rot=0: (table.cx, table.cy - (table.dy/2 + chair.dy/2 + gap))
+- rot=180: (table.cx, table.cy + (table.dy/2 + chair.dy/2 + gap))
+- rot=90: (table.cx - (table.dx/2 + chair.dx/2 + gap), table.cy)
+- rot=270:(table.cx + (table.dx/2 + chair.dx/2 + gap), table.cy)
+Apply ONLY if move<=0.25m. Then enforce alignment:
+- rot in {0,180}: |chair.X-table.X|<=0.15
+- rot in {90,270}: |chair.Y-table.Y|<=0.15
+If this is violated, keep original chair center (do NOT move other objects).
+
+LENGTH/WIDTH MAPPING (prevents swap bugs):
+Step1 gives world sizes (dx,dy). After rotationZ is decided:
+- rot 0/180: Length=dx, Width=dy
+- rot 90/270: Length=dy, Width=dx
+Round to 0.01.
+
+Finally output one JSON object only.
