@@ -1331,6 +1331,30 @@ class CommandsMixin:
             suffix += 1
         return str(candidate)
 
+    def _get_direct_reference_asset_url(self, prim) -> Optional[str]:
+        """指定Primに直接設定されたReferenceのassetPathを1件取得する。"""
+        if not prim or not prim.IsValid():
+            return None
+        for item in self._get_reference_items_from_prim(prim):
+            asset_path = getattr(item, "assetPath", None)
+            if asset_path:
+                return str(asset_path)
+        return None
+
+    def _clear_xform_ops(self, prim) -> UsdGeom.Xformable:
+        """PrimのXformOpを安全にクリアしてXformableを返す。"""
+        xformable = UsdGeom.Xformable(prim)
+        try:
+            for op in xformable.GetOrderedXformOps():
+                prim.RemoveProperty(op.GetAttr().GetName())
+            if hasattr(xformable, "ClearXformOpOrder"):
+                xformable.ClearXformOpOrder()
+            else:
+                xformable.SetXformOpOrder([])
+        except Exception as exc:  # pragma: no cover - defensive cleanup
+            omni.log.warn(f"Failed clearing existing xform ops on '{prim.GetPath()}': {exc}")
+        return xformable
+
     async def _apply_transform(self, prim, data: Dict[str, object], asset_url: Optional[str] = None) -> None:
         """
         レイアウト情報から取得したトランスフォームをPrimに設定する。
@@ -1368,18 +1392,7 @@ class CommandsMixin:
             # 最大試行回数に達してもロードされない場合は警告
             omni.log.warn(f"Asset geometry may not be fully loaded after {max_retries} frames")
 
-        xformable = UsdGeom.Xformable(prim)
-
-        # ステップ1: 既存トランスフォームのクリア
-        try:
-            for op in xformable.GetOrderedXformOps():
-                prim.RemoveProperty(op.GetAttr().GetName())
-            if hasattr(xformable, "ClearXformOpOrder"):
-                xformable.ClearXformOpOrder()
-            else:
-                xformable.SetXformOpOrder([])
-        except Exception as exc:  # pragma: no cover - defensive cleanup
-            omni.log.warn(f"Failed clearing existing xform ops on '{prim.GetPath()}': {exc}")
+        xformable = self._clear_xform_ops(prim)
 
         # ステップ2: 「元のサイズ」の計算
         # 待機処理で既に計算したBBoxを再利用
@@ -1438,19 +1451,56 @@ class CommandsMixin:
         is_door = category_lower == "door" or "door" in object_name.lower()
 
         if size_mode == "local":
-            # Local mode: Length/Width/Height are object-local axes (X=Right, Y=Forward, Z=Up).
-            target_size_x = json_length
-            target_size_y = json_width
-            target_size_z = json_height
+            stage = prim.GetStage()
+            if not stage:
+                omni.log.error("[LocalMode] No USD stage available while applying transform.")
+                return
 
-            # XformOps order: Translate(world) -> RotateZ(world) -> Scale(world) -> RotateZ(offset) -> RotateX(up)
-            translate_op = xformable.AddTranslateOp(opSuffix="world")
-            rotate_world_op = xformable.AddRotateZOp(opSuffix="world")
-            scale_op = xformable.AddScaleOp(opSuffix="world")
-            rotate_offset_op = xformable.AddRotateZOp(opSuffix="offset")
-            rotate_up_op = None
-            if up_axis == "Y":
-                rotate_up_op = xformable.AddRotateXOp(opSuffix="up")
+            placement_prim = prim
+            if prim.GetName() == "__local_ref":
+                parent_prim = prim.GetParent()
+                if parent_prim and parent_prim.IsValid():
+                    placement_prim = parent_prim
+
+            local_ref_path = Sdf.Path(str(placement_prim.GetPath())).AppendChild("__local_ref")
+            local_ref_prim = stage.GetPrimAtPath(local_ref_path)
+            if not local_ref_prim or not local_ref_prim.IsValid():
+                local_ref_prim = stage.DefinePrim(local_ref_path, "Xform")
+
+            desired_asset_url = (
+                asset_url
+                or self._get_direct_reference_asset_url(local_ref_prim)
+                or self._get_direct_reference_asset_url(placement_prim)
+                or self._get_asset_url_from_prim(placement_prim)
+            )
+            if not desired_asset_url:
+                omni.log.error(f"[LocalMode] Asset URL not found for '{placement_prim.GetPath()}'.")
+                return
+
+            try:
+                local_refs = local_ref_prim.GetReferences()
+                local_refs.ClearReferences()
+                local_refs.AddReference(desired_asset_url)
+            except Exception as exc:
+                omni.log.error(
+                    f"[LocalMode] Failed to update child reference for '{local_ref_prim.GetPath()}': {exc}"
+                )
+                return
+
+            try:
+                placement_prim.GetReferences().ClearReferences()
+            except Exception:
+                pass
+
+            # Local mode: keep parent as simple world pose, put normalize+scale on child.
+            placement_xform = self._clear_xform_ops(placement_prim)
+            local_xform = self._clear_xform_ops(local_ref_prim)
+
+            translate_op = placement_xform.AddTranslateOp(opSuffix="world")
+            rotate_world_op = placement_xform.AddRotateZOp(opSuffix="world")
+            scale_op = local_xform.AddScaleOp(opSuffix="local")
+            rotate_offset_op = local_xform.AddRotateZOp(opSuffix="offset")
+            rotate_up_op = local_xform.AddRotateXOp(opSuffix="up") if up_axis == "Y" else None
 
             translate_op.Set(Gf.Vec3d(0.0, 0.0, 0.0))
             rotate_world_op.Set(0.0)
@@ -1459,9 +1509,13 @@ class CommandsMixin:
             if rotate_up_op:
                 rotate_up_op.Set(90.0)
 
-            # Measure normalized size after offset + upAxis (world rotation disabled).
+            target_size_x = json_length
+            target_size_y = json_width
+            target_size_z = json_height
+
+            # Measure normalized size after normalize rotations (up/offset) with unit scale.
             bbox_cache_local = UsdGeom.BBoxCache(time_code, ["default"])
-            bbox_local = bbox_cache_local.ComputeWorldBound(prim)
+            bbox_local = bbox_cache_local.ComputeWorldBound(placement_prim)
             bbox_range_local = bbox_local.ComputeAlignedRange()
             normalized_vec = bbox_range_local.GetMax() - bbox_range_local.GetMin()
             normalized_size_x = normalized_vec[0]
@@ -1476,15 +1530,12 @@ class CommandsMixin:
             scale_x = safe_div(target_size_x, normalized_size_x)
             scale_y = safe_div(target_size_y, normalized_size_y)
             scale_z = safe_div(target_size_z, normalized_size_z)
-            final_scale = Gf.Vec3f(scale_x, scale_y, scale_z)
-            scale_op.Set(final_scale)
+            scale_op.Set(Gf.Vec3f(scale_x, scale_y, scale_z))
 
-            # Apply world rotation after scale.
             rotate_world_op.Set(base_rotation)
 
-            # Compute bbox after scale + world rotation to place in world.
             bbox_cache2 = UsdGeom.BBoxCache(time_code, ["default"])
-            bbox2 = bbox_cache2.ComputeWorldBound(prim)
+            bbox2 = bbox_cache2.ComputeWorldBound(placement_prim)
             bbox_range2 = bbox2.ComputeAlignedRange()
             min_after = bbox_range2.GetMin()
             max_after = bbox_range2.GetMax()
@@ -1492,10 +1543,10 @@ class CommandsMixin:
             center_x_after = (min_after[0] + max_after[0]) * 0.5
             center_y_after = (min_after[1] + max_after[1]) * 0.5
 
-            x = self._extract_float(data, "X", 0.0)
-            y = self._extract_float(data, "Y", 0.0)
-            x -= center_x_after
-            y -= center_y_after
+            x = self._extract_float(data, "X", 0.0) - center_x_after
+            y = self._extract_float(data, "Y", 0.0) - center_y_after
+            translate_z = -min_z_after_rot_scale
+            translate_op.Set(Gf.Vec3d(x, y, translate_z))
 
             search_prompt = str(data.get("search_prompt", "") or "")
             search_query = self._build_search_query_from_object({
@@ -1504,8 +1555,8 @@ class CommandsMixin:
                 "search_prompt": search_prompt,
             })
             self._store_placement_metadata(
-                prim,
-                asset_url,
+                placement_prim,
+                desired_asset_url,
                 base_rotation,
                 json_length,
                 json_width,
@@ -1519,97 +1570,6 @@ class CommandsMixin:
                 size_mode=size_mode,
             )
 
-            translate_z = -min_z_after_rot_scale
-            translate_op.Set(Gf.Vec3d(x, y, translate_z))
-
-            # For manipulator stability, try folding local normalize-rotation into scale permutation
-            # and use a simple SRT stack (translate, rotateZ, optional rotateX, scale).
-            # This avoids viewport decomposition drift on manual translation.
-            applied_simple_srt = False
-            try:
-                rot_offset_m = Gf.Rotation(Gf.Vec3d(0.0, 0.0, 1.0), rotation_offset).GetMatrix()
-                rot_up_m = (
-                    Gf.Rotation(Gf.Vec3d(1.0, 0.0, 0.0), 90.0).GetMatrix()
-                    if rotate_up_op
-                    else Gf.Matrix3d(1.0)
-                )
-                normalize_m = rot_offset_m * rot_up_m
-                scale_m = Gf.Matrix3d(
-                    scale_x, 0.0, 0.0,
-                    0.0, scale_y, 0.0,
-                    0.0, 0.0, scale_z,
-                )
-                permuted_scale_m = normalize_m.GetTranspose() * scale_m * normalize_m
-                offdiag = max(
-                    abs(float(permuted_scale_m[0][1])),
-                    abs(float(permuted_scale_m[0][2])),
-                    abs(float(permuted_scale_m[1][0])),
-                    abs(float(permuted_scale_m[1][2])),
-                    abs(float(permuted_scale_m[2][0])),
-                    abs(float(permuted_scale_m[2][1])),
-                )
-
-                if offdiag <= 1e-5:
-                    folded_scale = Gf.Vec3f(
-                        max(1e-6, abs(float(permuted_scale_m[0][0]))),
-                        max(1e-6, abs(float(permuted_scale_m[1][1]))),
-                        max(1e-6, abs(float(permuted_scale_m[2][2]))),
-                    )
-
-                    for op in xformable.GetOrderedXformOps():
-                        prim.RemoveProperty(op.GetAttr().GetName())
-                    if hasattr(xformable, "ClearXformOpOrder"):
-                        xformable.ClearXformOpOrder()
-                    else:
-                        xformable.SetXformOpOrder([])
-
-                    translate_final_op = xformable.AddTranslateOp()
-                    rotate_final_z_op = xformable.AddRotateZOp()
-                    rotate_final_x_op = xformable.AddRotateXOp() if rotate_up_op else None
-                    scale_final_op = xformable.AddScaleOp()
-
-                    translate_final_op.Set(Gf.Vec3d(x, y, translate_z))
-                    rotate_final_z_op.Set((base_rotation + rotation_offset) % 360.0)
-                    if rotate_final_x_op:
-                        rotate_final_x_op.Set(90.0)
-                    scale_final_op.Set(folded_scale)
-                    applied_simple_srt = True
-                else:
-                    omni.log.info(
-                        f"[LocalMode] Keep affine stack due non-diagonal folded scale (offdiag={offdiag:.6f})"
-                    )
-            except Exception as exc:
-                omni.log.warn(f"[LocalMode] Failed simple local SRT folding: {exc}")
-
-            if not applied_simple_srt:
-                # Fallback: collapse local-mode affine ops into one matrix op.
-                affine_ops = [rotate_world_op, scale_op, rotate_offset_op]
-                if rotate_up_op:
-                    affine_ops.append(rotate_up_op)
-
-                affine_matrix = None
-                try:
-                    affine_raw = UsdGeom.Xformable.GetLocalTransformation(affine_ops, time_code)
-                    affine_matrix = affine_raw[0] if isinstance(affine_raw, tuple) else affine_raw
-                except Exception as exc:
-                    omni.log.warn(f"[LocalMode] Failed to compute affine matrix from ops: {exc}")
-
-                if affine_matrix is not None:
-                    try:
-                        for op in xformable.GetOrderedXformOps():
-                            prim.RemoveProperty(op.GetAttr().GetName())
-                        if hasattr(xformable, "ClearXformOpOrder"):
-                            xformable.ClearXformOpOrder()
-                        else:
-                            xformable.SetXformOpOrder([])
-                    except Exception as exc:
-                        omni.log.warn(f"[LocalMode] Failed clearing xform ops for affine collapse: {exc}")
-
-                    translate_final_op = xformable.AddTranslateOp()
-                    affine_final_op = xformable.AddTransformOp()
-                    translate_final_op.Set(Gf.Vec3d(x, y, translate_z))
-                    affine_final_op.Set(affine_matrix)
-
             omni.log.info(
                 "[LocalMode] "
                 f"object='{object_name}', category='{category}', size_mode={size_mode}, "
@@ -1617,7 +1577,7 @@ class CommandsMixin:
                 f"normalized=({normalized_size_x:.4f}, {normalized_size_y:.4f}, {normalized_size_z:.4f}), "
                 f"scale=({scale_x:.4f}, {scale_y:.4f}, {scale_z:.4f}), "
                 f"rotationZ={base_rotation}, offset={rotation_offset}, up_axis={up_axis}, "
-                f"translate_z={translate_z:.4f}"
+                f"final_translate=({x:.4f}, {y:.4f}, {translate_z:.4f})"
             )
 
             return

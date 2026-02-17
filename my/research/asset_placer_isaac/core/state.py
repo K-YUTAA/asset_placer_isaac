@@ -190,11 +190,16 @@ class StateMixin:
         return []
 
     def _get_reference_prim(self, prim):
+        first_reference_prim = None
         current = prim
         while current and current.IsValid():
             try:
                 custom = current.GetCustomData()
-                if custom.get("asset_placer.asset_url"):
+                if (
+                    custom.get("asset_placer.asset_url")
+                    or custom.get("asset_placer.object_name")
+                    or custom.get("asset_placer.length") is not None
+                ):
                     return current
             except Exception:
                 pass
@@ -203,10 +208,12 @@ class StateMixin:
             for item in ref_items:
                 asset_path = getattr(item, "assetPath", None)
                 if asset_path:
-                    return current
+                    if first_reference_prim is None:
+                        first_reference_prim = current
+                    break
 
             current = current.GetParent()
-        return prim
+        return first_reference_prim or prim
 
     def _get_asset_url_from_prim(self, prim) -> Optional[str]:
         # Walk up the prim hierarchy until we find a reference or custom data.
