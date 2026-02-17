@@ -746,6 +746,127 @@ class CommandsMixin:
             f"[DebugBBox] Placed {placed} boxes under '{root_path}'. Skipped={skipped}."
         )
 
+    def _generate_layout_walls_and_windows(
+        self,
+        stage,
+        root_prim_path: str,
+        layout_data: Dict[str, object],
+        objects: List[Dict[str, object]],
+        door_objects: List[Dict[str, object]],
+    ) -> Tuple[List[str], List[str]]:
+        wall_paths: List[str] = []
+        window_paths: List[str] = []
+
+        layout_dict = layout_data if isinstance(layout_data, dict) else {}
+        rooms = layout_dict.get("rooms") or []
+        outer_polygon = layout_dict.get("outer_polygon")
+        room_polygon = layout_dict.get("room_polygon")
+        openings: List[Dict[str, object]] = []
+
+        if rooms:
+            for room in rooms:
+                openings.extend(room.get("openings") or [])
+        if isinstance(layout_dict.get("openings"), list):
+            openings.extend(layout_dict.get("openings") or [])
+
+        openings = self._dedupe_openings(openings)
+        interior_openings = [
+            op for op in openings if str(op.get("type", "") or "").lower() == "door"
+        ]
+        used_polygon_walls = False
+
+        if rooms or outer_polygon or room_polygon:
+            try:
+                outer_edges: List[Dict[str, object]] = []
+                if outer_polygon:
+                    outer_points = self._wall_generator._normalize_polygon_points(outer_polygon)
+                    if len(outer_points) >= 3:
+                        outer_edges = self._wall_generator._build_edges(outer_points)
+                    if outer_edges:
+                        wall_chunk, window_chunk = self._wall_generator.generate_walls_from_polygon(
+                            stage, root_prim_path, outer_polygon, openings
+                        )
+                        wall_paths.extend(wall_chunk)
+                        window_paths.extend(window_chunk)
+
+                if rooms:
+                    room_edges: List[Dict[str, object]] = []
+                    for room in rooms:
+                        polygon = room.get("room_polygon")
+                        if not polygon:
+                            continue
+                        room_points = self._wall_generator._normalize_polygon_points(polygon)
+                        if len(room_points) < 3:
+                            continue
+                        room_edges.extend(self._wall_generator._build_edges(room_points))
+
+                    if room_edges:
+                        merged_edges = self._merge_axis_aligned_edges(room_edges)
+                        if outer_edges:
+                            merged_edges = self._filter_edges_against_outer(
+                                merged_edges, outer_edges
+                            )
+                        if merged_edges:
+                            wall_chunk, window_chunk = self._wall_generator.generate_walls_from_edges(
+                                stage, root_prim_path, merged_edges, interior_openings
+                            )
+                            wall_paths.extend(wall_chunk)
+                            window_paths.extend(window_chunk)
+
+                elif room_polygon and not outer_polygon:
+                    wall_chunk, window_chunk = self._wall_generator.generate_walls_from_polygon(
+                        stage, root_prim_path, room_polygon, openings
+                    )
+                    wall_paths.extend(wall_chunk)
+                    window_paths.extend(window_chunk)
+
+                used_polygon_walls = bool(wall_paths or window_paths)
+            except Exception as exc:
+                omni.log.warn(
+                    f"Polygon wall generation failed, falling back to rectangular walls: {exc}"
+                )
+                used_polygon_walls = False
+
+        if not used_polygon_walls:
+            area_size_x = layout_dict.get("area_size_X")
+            area_size_y = layout_dict.get("area_size_Y")
+            origin_mode = "center"
+
+            if isinstance(area_size_x, (int, float)) and isinstance(area_size_y, (int, float)):
+                # Heuristic: if all object coords are inside [0, size], treat origin as bottom-left.
+                try:
+                    xs = [float(obj.get("X")) for obj in objects if obj.get("X") is not None]
+                    ys = [float(obj.get("Y")) for obj in objects if obj.get("Y") is not None]
+                    if xs and ys:
+                        min_x, max_x = min(xs), max(xs)
+                        min_y, max_y = min(ys), max(ys)
+                        tol = 1e-3
+                        if (
+                            min_x >= -tol
+                            and min_y >= -tol
+                            and max_x <= float(area_size_x) + tol
+                            and max_y <= float(area_size_y) + tol
+                        ):
+                            origin_mode = "bottom_left"
+                except Exception:
+                    origin_mode = "center"
+
+                wall_paths = self._create_procedural_walls(
+                    stage,
+                    root_prim_path,
+                    float(area_size_x),
+                    float(area_size_y),
+                    door_objects,
+                    origin_mode,
+                )
+            else:
+                omni.log.warn(
+                    "Cannot generate walls: area_size_X or area_size_Y not found in layout data. "
+                    f"area_size_X={area_size_x}, area_size_Y={area_size_y}"
+                )
+
+        return wall_paths, window_paths
+
     async def _search_and_place_assets(self, layout_data) -> None:
             """USD Search を用いてアセット検索と配置を行う非同期タスク。"""
             placed = 0
@@ -850,117 +971,15 @@ class CommandsMixin:
     
                     await asyncio.sleep(0)
     
-                # すべてのオブジェクト配置が完了した後、壁を生成
-                omni.log.info("=== Generating procedural walls ===")
-                wall_paths: List[str] = []
-                window_paths: List[str] = []
-    
-                rooms = layout_data.get("rooms") or []
-                outer_polygon = layout_data.get("outer_polygon")
-                room_polygon = layout_data.get("room_polygon")
-                openings: List[Dict[str, object]] = []
-    
-                if rooms:
-                    for room in rooms:
-                        openings.extend(room.get("openings") or [])
-                if isinstance(layout_data.get("openings"), list):
-                    openings.extend(layout_data.get("openings") or [])
-    
-                openings = self._dedupe_openings(openings)
-                interior_openings = [
-                    op for op in openings if str(op.get("type", "") or "").lower() == "door"
-                ]
-                used_polygon_walls = False
-    
-                if rooms or outer_polygon or room_polygon:
-                    try:
-                        outer_edges: List[Dict[str, object]] = []
-                        if outer_polygon:
-                            outer_points = self._wall_generator._normalize_polygon_points(outer_polygon)
-                            if len(outer_points) >= 3:
-                                outer_edges = self._wall_generator._build_edges(outer_points)
-                            if outer_edges:
-                                wall_chunk, window_chunk = self._wall_generator.generate_walls_from_polygon(
-                                    stage, root_prim_path, outer_polygon, openings
-                                )
-                                wall_paths.extend(wall_chunk)
-                                window_paths.extend(window_chunk)
-    
-                        if rooms:
-                            room_edges: List[Dict[str, object]] = []
-                            for room in rooms:
-                                polygon = room.get("room_polygon")
-                                if not polygon:
-                                    continue
-                                room_points = self._wall_generator._normalize_polygon_points(polygon)
-                                if len(room_points) < 3:
-                                    continue
-                                room_edges.extend(self._wall_generator._build_edges(room_points))
-    
-                            if room_edges:
-                                merged_edges = self._merge_axis_aligned_edges(room_edges)
-                                if outer_edges:
-                                    merged_edges = self._filter_edges_against_outer(
-                                        merged_edges, outer_edges
-                                    )
-                                if merged_edges:
-                                    wall_chunk, window_chunk = self._wall_generator.generate_walls_from_edges(
-                                        stage, root_prim_path, merged_edges, interior_openings
-                                    )
-                                    wall_paths.extend(wall_chunk)
-                                    window_paths.extend(window_chunk)
-    
-                        elif room_polygon and not outer_polygon:
-                            wall_chunk, window_chunk = self._wall_generator.generate_walls_from_polygon(
-                                stage, root_prim_path, room_polygon, openings
-                            )
-                            wall_paths.extend(wall_chunk)
-                            window_paths.extend(window_chunk)
-    
-                        used_polygon_walls = bool(wall_paths or window_paths)
-                    except Exception as exc:
-                        omni.log.warn(
-                            f"Polygon wall generation failed, falling back to rectangular walls: {exc}"
-                        )
-                        used_polygon_walls = False
-
-                if not used_polygon_walls:
-                    area_size_x = layout_data.get("area_size_X")
-                    area_size_y = layout_data.get("area_size_Y")
-                    origin_mode = "center"
-
-                    if isinstance(area_size_x, (int, float)) and isinstance(area_size_y, (int, float)):
-                        # Heuristic: if all object coords are inside [0, size], treat origin as bottom-left.
-                        try:
-                            xs = [float(obj.get("X")) for obj in objects if obj.get("X") is not None]
-                            ys = [float(obj.get("Y")) for obj in objects if obj.get("Y") is not None]
-                            if xs and ys:
-                                min_x, max_x = min(xs), max(xs)
-                                min_y, max_y = min(ys), max(ys)
-                                tol = 1e-3
-                                if (
-                                    min_x >= -tol
-                                    and min_y >= -tol
-                                    and max_x <= float(area_size_x) + tol
-                                    and max_y <= float(area_size_y) + tol
-                                ):
-                                    origin_mode = "bottom_left"
-                        except Exception:
-                            origin_mode = "center"
-
-                        wall_paths = self._create_procedural_walls(
-                            stage,
-                            root_prim_path,
-                            float(area_size_x),
-                            float(area_size_y),
-                            door_objects,
-                            origin_mode,
-                        )
-                    else:
-                        omni.log.warn(
-                            "Cannot generate walls: area_size_X or area_size_Y not found in layout data. "
-                            f"area_size_X={area_size_x}, area_size_Y={area_size_y}"
-                        )
+                # すべてのオブジェクト配置が完了した後、壁と窓を生成
+                omni.log.info("=== Generating procedural walls/windows ===")
+                wall_paths, window_paths = self._generate_layout_walls_and_windows(
+                    stage,
+                    root_prim_path,
+                    layout_data,
+                    objects,
+                    door_objects,
+                )
 
                 placed += len(wall_paths) + len(window_paths)
                 omni.log.info(
@@ -1000,6 +1019,12 @@ class CommandsMixin:
             for obj in objects:
                 if isinstance(obj, dict) and "size_mode" not in obj:
                     obj["size_mode"] = size_mode
+            door_objects = []
+            for obj in objects:
+                name = str(obj.get("object_name", "") or "").strip().lower()
+                category = str(obj.get("category", "") or "").strip().lower()
+                if category == "door" or "door" in name:
+                    door_objects.append(obj)
 
             omni.log.info(f"[DebugBBox] Placing {len(objects)} bounding boxes...")
 
@@ -1015,6 +1040,16 @@ class CommandsMixin:
                     skipped += 1
 
                 await asyncio.sleep(0)
+
+            omni.log.info("[DebugBBox] Generating procedural walls/windows...")
+            wall_paths, window_paths = self._generate_layout_walls_and_windows(
+                stage,
+                root_prim_path,
+                layout_data,
+                objects,
+                door_objects,
+            )
+            placed += len(wall_paths) + len(window_paths)
 
             omni.log.info(f"[DebugBBox] Done. Placed={placed}, Skipped={skipped}")
         except asyncio.CancelledError:
