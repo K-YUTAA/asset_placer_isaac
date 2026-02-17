@@ -1496,8 +1496,9 @@ class CommandsMixin:
             placement_xform = self._clear_xform_ops(placement_prim)
             local_xform = self._clear_xform_ops(local_ref_prim)
 
-            translate_op = placement_xform.AddTranslateOp(opSuffix="world")
-            rotate_world_op = placement_xform.AddRotateZOp(opSuffix="world")
+            # Parent ops are unsuffixed so viewport manipulators can edit them in-place.
+            translate_op = placement_xform.AddTranslateOp()
+            rotate_world_op = placement_xform.AddRotateZOp()
             scale_op = local_xform.AddScaleOp(opSuffix="local")
             rotate_offset_op = local_xform.AddRotateZOp(opSuffix="offset")
             rotate_up_op = local_xform.AddRotateXOp(opSuffix="up") if up_axis == "Y" else None
