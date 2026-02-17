@@ -260,7 +260,7 @@ class StateMixin:
         length = custom.get("asset_placer.length")
         width = custom.get("asset_placer.width")
         height = custom.get("asset_placer.height")
-        rotation = custom.get("asset_placer.rotationZ", 0.0)
+        rotation = custom.get("asset_placer.rotationZ")
         x = custom.get("asset_placer.x", 0.0)
         y = custom.get("asset_placer.y", 0.0)
         object_name = custom.get("asset_placer.object_name") or prim.GetName()
@@ -281,12 +281,17 @@ class StateMixin:
             fallback_rotation=self._safe_float(rotation, 0.0),
         )
         resolved_size_mode = xform_data["size_mode"]
+        resolved_rotation = float(xform_data["rotationZ"])
+        if resolved_size_mode == "local":
+            # Keep JSON/base rotation semantics for local mode.
+            # Xform rotate ops may include asset offset and are not authoritative.
+            resolved_rotation = self._safe_float(rotation, resolved_rotation)
 
         return {
             "Length": float(length),
             "Width": float(width),
             "Height": float(height),
-            "rotationZ": float(xform_data["rotationZ"]),
+            "rotationZ": float(resolved_rotation),
             "X": float(xform_data["X"]),
             "Y": float(xform_data["Y"]),
             "size_mode": resolved_size_mode,
@@ -465,7 +470,7 @@ class StateMixin:
             custom_length = custom.get("asset_placer.length")
             custom_width = custom.get("asset_placer.width")
             custom_height = custom.get("asset_placer.height")
-            custom_rotation = custom.get("asset_placer.rotationZ", 0.0)
+            custom_rotation = custom.get("asset_placer.rotationZ")
             custom_x = custom.get("asset_placer.x", 0.0)
             custom_y = custom.get("asset_placer.y", 0.0)
             custom_size_mode = custom.get("asset_placer.size_mode")
@@ -509,6 +514,8 @@ class StateMixin:
             x = float(xform_data["X"])
             y = float(xform_data["Y"])
             rotation = float(xform_data["rotationZ"])
+            if resolved_size_mode == "local":
+                rotation = self._safe_float(custom_rotation, rotation)
 
             if length <= 0.0 or width <= 0.0 or height <= 0.0:
                 omni.log.warn(f"Invalid bbox size for '{prim.GetPath()}': {size_vec}")

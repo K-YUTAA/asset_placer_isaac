@@ -1522,38 +1522,93 @@ class CommandsMixin:
             translate_z = -min_z_after_rot_scale
             translate_op.Set(Gf.Vec3d(x, y, translate_z))
 
-            # Collapse local-mode affine ops into a single transform op.
-            # This keeps the exact placement result, but avoids gizmo decomposition drift
-            # (manual translate unexpectedly changing orientation) caused by mixed
-            # non-uniform scale + multi-rotation stacks.
-            affine_ops = [rotate_world_op, scale_op, rotate_offset_op]
-            if rotate_up_op:
-                affine_ops.append(rotate_up_op)
-
-            affine_matrix = None
+            # For manipulator stability, try folding local normalize-rotation into scale permutation
+            # and use a simple SRT stack (translate, rotateZ, optional rotateX, scale).
+            # This avoids viewport decomposition drift on manual translation.
+            applied_simple_srt = False
             try:
-                affine_raw = UsdGeom.Xformable.GetLocalTransformation(affine_ops, time_code)
-                affine_matrix = affine_raw[0] if isinstance(affine_raw, tuple) else affine_raw
-            except Exception as exc:
-                omni.log.warn(f"[LocalMode] Failed to compute affine matrix from ops: {exc}")
+                rot_offset_m = Gf.Rotation(Gf.Vec3d(0.0, 0.0, 1.0), rotation_offset).GetMatrix()
+                rot_up_m = (
+                    Gf.Rotation(Gf.Vec3d(1.0, 0.0, 0.0), 90.0).GetMatrix()
+                    if rotate_up_op
+                    else Gf.Matrix3d(1.0)
+                )
+                normalize_m = rot_offset_m * rot_up_m
+                scale_m = Gf.Matrix3d(
+                    scale_x, 0.0, 0.0,
+                    0.0, scale_y, 0.0,
+                    0.0, 0.0, scale_z,
+                )
+                permuted_scale_m = normalize_m.GetTranspose() * scale_m * normalize_m
+                offdiag = max(
+                    abs(float(permuted_scale_m[0][1])),
+                    abs(float(permuted_scale_m[0][2])),
+                    abs(float(permuted_scale_m[1][0])),
+                    abs(float(permuted_scale_m[1][2])),
+                    abs(float(permuted_scale_m[2][0])),
+                    abs(float(permuted_scale_m[2][1])),
+                )
 
-            if affine_matrix is not None:
-                try:
+                if offdiag <= 1e-5:
+                    folded_scale = Gf.Vec3f(
+                        max(1e-6, abs(float(permuted_scale_m[0][0]))),
+                        max(1e-6, abs(float(permuted_scale_m[1][1]))),
+                        max(1e-6, abs(float(permuted_scale_m[2][2]))),
+                    )
+
                     for op in xformable.GetOrderedXformOps():
                         prim.RemoveProperty(op.GetAttr().GetName())
                     if hasattr(xformable, "ClearXformOpOrder"):
                         xformable.ClearXformOpOrder()
                     else:
                         xformable.SetXformOpOrder([])
-                except Exception as exc:
-                    omni.log.warn(f"[LocalMode] Failed clearing xform ops for affine collapse: {exc}")
 
-                # Use unsuffixed ops so viewport translate gizmo edits xformOp:translate
-                # directly instead of decomposing transform stacks.
-                translate_final_op = xformable.AddTranslateOp()
-                affine_final_op = xformable.AddTransformOp()
-                translate_final_op.Set(Gf.Vec3d(x, y, translate_z))
-                affine_final_op.Set(affine_matrix)
+                    translate_final_op = xformable.AddTranslateOp()
+                    rotate_final_z_op = xformable.AddRotateZOp()
+                    rotate_final_x_op = xformable.AddRotateXOp() if rotate_up_op else None
+                    scale_final_op = xformable.AddScaleOp()
+
+                    translate_final_op.Set(Gf.Vec3d(x, y, translate_z))
+                    rotate_final_z_op.Set((base_rotation + rotation_offset) % 360.0)
+                    if rotate_final_x_op:
+                        rotate_final_x_op.Set(90.0)
+                    scale_final_op.Set(folded_scale)
+                    applied_simple_srt = True
+                else:
+                    omni.log.info(
+                        f"[LocalMode] Keep affine stack due non-diagonal folded scale (offdiag={offdiag:.6f})"
+                    )
+            except Exception as exc:
+                omni.log.warn(f"[LocalMode] Failed simple local SRT folding: {exc}")
+
+            if not applied_simple_srt:
+                # Fallback: collapse local-mode affine ops into one matrix op.
+                affine_ops = [rotate_world_op, scale_op, rotate_offset_op]
+                if rotate_up_op:
+                    affine_ops.append(rotate_up_op)
+
+                affine_matrix = None
+                try:
+                    affine_raw = UsdGeom.Xformable.GetLocalTransformation(affine_ops, time_code)
+                    affine_matrix = affine_raw[0] if isinstance(affine_raw, tuple) else affine_raw
+                except Exception as exc:
+                    omni.log.warn(f"[LocalMode] Failed to compute affine matrix from ops: {exc}")
+
+                if affine_matrix is not None:
+                    try:
+                        for op in xformable.GetOrderedXformOps():
+                            prim.RemoveProperty(op.GetAttr().GetName())
+                        if hasattr(xformable, "ClearXformOpOrder"):
+                            xformable.ClearXformOpOrder()
+                        else:
+                            xformable.SetXformOpOrder([])
+                    except Exception as exc:
+                        omni.log.warn(f"[LocalMode] Failed clearing xform ops for affine collapse: {exc}")
+
+                    translate_final_op = xformable.AddTranslateOp()
+                    affine_final_op = xformable.AddTransformOp()
+                    translate_final_op.Set(Gf.Vec3d(x, y, translate_z))
+                    affine_final_op.Set(affine_matrix)
 
             omni.log.info(
                 "[LocalMode] "
