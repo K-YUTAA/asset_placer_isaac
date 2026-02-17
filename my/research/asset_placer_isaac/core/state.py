@@ -361,6 +361,9 @@ class StateMixin:
         # Local-mode affine-collapsed stack (translate:world + transform:affine)
         if "xformOp:translate:world" in op_values and "xformOp:transform:affine" in op_values:
             return "local"
+        # Local-mode affine-collapsed stack (unsuffixed ops)
+        if "xformOp:translate" in op_values and "xformOp:transform" in op_values:
+            return "local"
         return "world"
 
     @staticmethod
@@ -378,6 +381,18 @@ class StateMixin:
             return None
         try:
             return float(value)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _extract_yaw_deg_from_transform_value(value: object) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            matrix = Gf.Matrix4d(value)
+            m = matrix.GetOrthonormalized()
+            yaw_rad = math.atan2(m[1][0], m[0][0])
+            return math.degrees(yaw_rad)
         except Exception:
             return None
 
@@ -414,6 +429,13 @@ class StateMixin:
             if rot is not None:
                 rotation = rot
                 break
+        else:
+            # Affine-collapsed local stack has no explicit rotate op.
+            for name in ("xformOp:transform:affine", "xformOp:transform"):
+                rot = self._extract_yaw_deg_from_transform_value(op_values.get(name))
+                if rot is not None:
+                    rotation = rot
+                    break
 
         return {"X": x, "Y": y, "rotationZ": rotation, "size_mode": mode}
 

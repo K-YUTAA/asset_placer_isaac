@@ -1548,8 +1548,10 @@ class CommandsMixin:
                 except Exception as exc:
                     omni.log.warn(f"[LocalMode] Failed clearing xform ops for affine collapse: {exc}")
 
-                translate_final_op = xformable.AddTranslateOp(opSuffix="world")
-                affine_final_op = xformable.AddTransformOp(opSuffix="affine")
+                # Use unsuffixed ops so viewport translate gizmo edits xformOp:translate
+                # directly instead of decomposing transform stacks.
+                translate_final_op = xformable.AddTranslateOp()
+                affine_final_op = xformable.AddTransformOp()
                 translate_final_op.Set(Gf.Vec3d(x, y, translate_z))
                 affine_final_op.Set(affine_matrix)
 
