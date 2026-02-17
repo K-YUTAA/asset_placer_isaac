@@ -1054,6 +1054,10 @@ class CommandsMixin:
                         "RotationZ",
                         "rotation_z",
                         "Rotation_Z",
+                        "rotationY",
+                        "RotationY",
+                        "rotation_y",
+                        "Rotation_Y",
                         "rotation",
                         "Rotation",
                     ],
@@ -1063,6 +1067,9 @@ class CommandsMixin:
             size_mode = str(object_data.get("size_mode") or "world").lower()
             if size_mode not in ("world", "local"):
                 size_mode = "world"
+            # JSON semantics: rotationZ=0:+Y, 90:+X, 180:-Y, 270:-X (functional front).
+            # USD RotateZ positive direction is opposite for this +Y-based mapping,
+            # so local-mode root rotation must use negative sign to preserve JSON semantics.
             front_rotation_source = 0.0 if size_mode == "local" else rotation
 
             front_thickness = max(0.02, min(0.1, width * 0.1))
@@ -1113,7 +1120,7 @@ class CommandsMixin:
                 pass
             root_ops.AddTranslateOp().Set(Gf.Vec3d(x, y, 0.0))
             if size_mode == "local":
-                root_ops.AddRotateZOp().Set(rotation)
+                root_ops.AddRotateZOp().Set(-rotation)
 
             body_path = f"{root_path}/Body"
             body = UsdGeom.Cube.Define(stage, Sdf.Path(body_path))
