@@ -20,6 +20,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Updated collision check (`backend/ai_processing.py`) to swap local X/Y footprint for `rotationZ` 90/270 only in `size_mode=local`
 - Updated local-semantics instructions in `core/constants.py` and `inputs_isaac/prompt_2.txt`
 - Refreshed `inputs_isaac` dimension samples (removed duplicate copies, added `dimensions_big_house.txt` and `dimensions_two-story_1.txt`)
+- Fixed local-mode manual-move rotation drift by splitting transform responsibilities across parent/child prims
+- Fixed replace/manual-edit instability by preferring metadata prim resolution in `_get_reference_prim`
+- Adjusted local-mode parent ops to unsuffixed `translate/rotateZ` for viewport manipulator compatibility
+
+**Work Report**: `docs/REPORT_20260217.md`
 
 ## [2026-01-29]
 
