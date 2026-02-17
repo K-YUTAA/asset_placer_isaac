@@ -31,6 +31,7 @@ def default_eval_config() -> Dict[str, Any]:
     return {
         "grid_resolution_m": 0.10,
         "robot_radius_m": 0.30,
+        "occupancy_exclude_categories": ["floor"],
         "start_xy": [0.8, 0.8],
         "goal_xy": [5.0, 5.0],
         "sample_step_m": 0.50,
@@ -96,13 +97,30 @@ def _make_grid(nx: int, ny: int, value: bool = False) -> Grid:
     return [[value for _ in range(nx)] for _ in range(ny)]
 
 
-def _build_room_and_occupancy(layout: Dict[str, Any], resolution: float) -> Tuple[Grid, Grid, Tuple[float, float, float, float]]:
+def _build_room_and_occupancy(
+    layout: Dict[str, Any],
+    resolution: float,
+    occupancy_exclude_categories: Optional[set[str]] = None,
+) -> Tuple[Grid, Grid, Tuple[float, float, float, float]]:
     room_poly = layout["room"]["boundary_poly_xy"]
     bounds = room_bbox(room_poly)
     nx, ny = _grid_dims(bounds, resolution)
 
     room_mask = _make_grid(nx, ny, False)
     occ = _make_grid(nx, ny, False)
+    exclude_set = occupancy_exclude_categories or set()
+    occupancy_objects: List[Dict[str, Any]] = []
+    for obj in layout.get("objects", []):
+        if not isinstance(obj, dict):
+            continue
+        category = str(obj.get("category") or "").strip().lower()
+        obj_id = str(obj.get("id") or "").strip().lower()
+        if category in exclude_set:
+            continue
+        # Backward compatibility for contracts with missing category.
+        if "floor" in exclude_set and (obj_id.startswith("floor_") or obj_id == "floor"):
+            continue
+        occupancy_objects.append(obj)
 
     for iy in range(ny):
         for ix in range(nx):
@@ -111,7 +129,7 @@ def _build_room_and_occupancy(layout: Dict[str, Any], resolution: float) -> Tupl
             room_mask[iy][ix] = inside_room
             if not inside_room:
                 continue
-            for obj in layout.get("objects", []):
+            for obj in occupancy_objects:
                 if point_in_obb(x, y, obj):
                     occ[iy][ix] = True
                     break
@@ -703,10 +721,16 @@ def evaluate_layout(
 
     resolution = as_float(config.get("grid_resolution_m"), 0.10)
     robot_radius = as_float(config.get("robot_radius_m"), 0.30)
+    occupancy_exclude_raw = config.get("occupancy_exclude_categories")
+    if occupancy_exclude_raw is None:
+        occupancy_exclude_raw = ["floor"]
+    occupancy_exclude_categories = _to_lower_set(occupancy_exclude_raw)
     start_xy = config.get("start_xy") or [0.8, 0.8]
     goal_xy = config.get("goal_xy") or [5.0, 5.0]
 
-    room_mask, occ, bounds = _build_room_and_occupancy(layout, resolution)
+    room_mask, occ, bounds = _build_room_and_occupancy(
+        layout, resolution, occupancy_exclude_categories
+    )
     nx, ny = _grid_dims(bounds, resolution)
 
     radius_cells = max(0, int(math.ceil(robot_radius / resolution)))
@@ -885,6 +909,7 @@ def evaluate_layout(
     debug = {
         "bounds": bounds,
         "resolution": resolution,
+        "occupancy_exclude_categories": sorted(occupancy_exclude_categories),
         "start_cell": start,
         "goal_cell": goal,
         "path_cells": path_cells,

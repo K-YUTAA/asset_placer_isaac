@@ -1,0 +1,15 @@
+# Experiments Changelog
+
+`experiments/` 配下の評価・実験スクリプト専用の変更履歴です。  
+（Extension 本体の変更履歴は `docs/CHANGELOG.md` を参照）
+
+## [Unreleased]
+
+### Changed
+- `eval_metrics.py` の占有グリッド計算で、デフォルトで `floor` カテゴリを障害物から除外するように変更。
+- 新規設定キー `occupancy_exclude_categories` を追加（未指定時は `["floor"]`）。
+- 旧データ互換として、カテゴリ欠落時でも `id` が `floor` 系なら除外されるフォールバックを追加。
+
+### Impact
+- 床オブジェクトが評価セルを全面占有して `validity=0` になる問題を回避。
+- 既存設定を変更しなくても、通常ケースで `R_reach` / `C_vis` / `clr_min` が正しく算出される。
