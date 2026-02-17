@@ -20,6 +20,22 @@ from pxr import Gf, Usd, UsdGeom
 
 
 class StateMixin:
+    @staticmethod
+    def _normalize_size_mode(value: object, default: str = "world") -> str:
+        mode = str(value or default).strip().lower()
+        if mode not in ("world", "local"):
+            return default
+        return mode
+
+    @staticmethod
+    def _safe_float(value: object, default: float = 0.0) -> float:
+        try:
+            if value is None:
+                return float(default)
+            return float(value)
+        except (TypeError, ValueError):
+            return float(default)
+
     def _load_rotation_offsets(self) -> Dict[str, int]:
         if os.path.exists(self._rotation_offsets_file):
             try:
@@ -251,18 +267,29 @@ class StateMixin:
         category = custom.get("asset_placer.category") or ""
         search_prompt = custom.get("asset_placer.search_prompt") or ""
         search_query = custom.get("asset_placer.search_query") or ""
+        custom_size_mode = custom.get("asset_placer.size_mode")
 
         if length is None or width is None or height is None:
             omni.log.warn(f"Missing placement metadata for '{prim.GetPath()}'.")
             return None
 
+        xform_data = self._extract_pose_from_xform_ops(
+            prim,
+            preferred_size_mode=str(custom_size_mode) if custom_size_mode else None,
+            fallback_x=self._safe_float(x, 0.0),
+            fallback_y=self._safe_float(y, 0.0),
+            fallback_rotation=self._safe_float(rotation, 0.0),
+        )
+        resolved_size_mode = xform_data["size_mode"]
+
         return {
             "Length": float(length),
             "Width": float(width),
             "Height": float(height),
-            "rotationZ": float(rotation),
-            "X": float(x),
-            "Y": float(y),
+            "rotationZ": float(xform_data["rotationZ"]),
+            "X": float(xform_data["X"]),
+            "Y": float(xform_data["Y"]),
+            "size_mode": resolved_size_mode,
             "object_name": str(object_name) if object_name else "",
             "category": str(category) if category else "",
             "search_prompt": str(search_prompt) if search_prompt else "",
@@ -283,6 +310,7 @@ class StateMixin:
         category: Optional[str] = None,
         search_prompt: Optional[str] = None,
         search_query: Optional[str] = None,
+        size_mode: Optional[str] = None,
     ) -> None:
         try:
             prim.SetCustomDataByKey("asset_placer.asset_url", asset_url or "")
@@ -300,8 +328,91 @@ class StateMixin:
                 prim.SetCustomDataByKey("asset_placer.search_prompt", str(search_prompt))
             if search_query is not None:
                 prim.SetCustomDataByKey("asset_placer.search_query", str(search_query))
+            if size_mode is not None:
+                prim.SetCustomDataByKey("asset_placer.size_mode", self._normalize_size_mode(size_mode))
         except Exception as exc:
             omni.log.warn(f"Failed to store placement metadata for '{prim.GetPath()}': {exc}")
+
+    def _collect_xform_op_values(self, prim) -> Dict[str, object]:
+        values: Dict[str, object] = {}
+        try:
+            xformable = UsdGeom.Xformable(prim)
+            for op in xformable.GetOrderedXformOps():
+                try:
+                    name = str(op.GetOpName())
+                    values[name] = op.Get()
+                except Exception:
+                    continue
+        except Exception as exc:
+            omni.log.warn(f"Failed to collect xform ops from '{prim.GetPath()}': {exc}")
+        return values
+
+    def _infer_size_mode_from_xform_ops(self, op_values: Dict[str, object]) -> str:
+        if any(
+            name in op_values
+            for name in (
+                "xformOp:translate:world",
+                "xformOp:rotateZ:world",
+                "xformOp:scale:world",
+                "xformOp:rotateZ:offset",
+            )
+        ):
+            return "local"
+        return "world"
+
+    @staticmethod
+    def _extract_xy_from_translate_value(value: object) -> Optional[Tuple[float, float]]:
+        if value is None:
+            return None
+        try:
+            return float(value[0]), float(value[1])
+        except Exception:
+            return None
+
+    @staticmethod
+    def _extract_rot_from_value(value: object) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except Exception:
+            return None
+
+    def _extract_pose_from_xform_ops(
+        self,
+        prim,
+        preferred_size_mode: Optional[str],
+        fallback_x: float,
+        fallback_y: float,
+        fallback_rotation: float,
+    ) -> Dict[str, object]:
+        op_values = self._collect_xform_op_values(prim)
+        mode = self._normalize_size_mode(preferred_size_mode, default=self._infer_size_mode_from_xform_ops(op_values))
+
+        if mode == "local":
+            translate_candidates = ("xformOp:translate:world", "xformOp:translate")
+            rotate_candidates = ("xformOp:rotateZ:world", "xformOp:rotateZ")
+        else:
+            translate_candidates = ("xformOp:translate", "xformOp:translate:world")
+            rotate_candidates = ("xformOp:rotateZ", "xformOp:rotateZ:world")
+
+        x = float(fallback_x)
+        y = float(fallback_y)
+        rotation = float(fallback_rotation)
+
+        for name in translate_candidates:
+            xy = self._extract_xy_from_translate_value(op_values.get(name))
+            if xy is not None:
+                x, y = xy
+                break
+
+        for name in rotate_candidates:
+            rot = self._extract_rot_from_value(op_values.get(name))
+            if rot is not None:
+                rotation = rot
+                break
+
+        return {"X": x, "Y": y, "rotationZ": rotation, "size_mode": mode}
 
     def _extract_yaw_deg_from_matrix(self, matrix: Gf.Matrix4d) -> float:
         try:
@@ -321,6 +432,19 @@ class StateMixin:
             asset_url = self._get_asset_url_from_prim(prim)
 
         try:
+            try:
+                custom = prim.GetCustomData()
+            except Exception:
+                custom = {}
+
+            custom_length = custom.get("asset_placer.length")
+            custom_width = custom.get("asset_placer.width")
+            custom_height = custom.get("asset_placer.height")
+            custom_rotation = custom.get("asset_placer.rotationZ", 0.0)
+            custom_x = custom.get("asset_placer.x", 0.0)
+            custom_y = custom.get("asset_placer.y", 0.0)
+            custom_size_mode = custom.get("asset_placer.size_mode")
+
             time_code = Usd.TimeCode.Default()
             bbox_cache = UsdGeom.BBoxCache(time_code, ["default"])
             bbox = bbox_cache.ComputeWorldBound(prim)
@@ -332,11 +456,34 @@ class StateMixin:
             translation = matrix.ExtractTranslation()
             rotation = self._extract_yaw_deg_from_matrix(matrix)
 
-            length = float(size_vec[0])
-            width = float(size_vec[1])
-            height = float(size_vec[2])
-            x = float(translation[0])
-            y = float(translation[1])
+            xform_data = self._extract_pose_from_xform_ops(
+                prim,
+                preferred_size_mode=str(custom_size_mode) if custom_size_mode else None,
+                fallback_x=self._safe_float(custom_x, float(translation[0])),
+                fallback_y=self._safe_float(custom_y, float(translation[1])),
+                fallback_rotation=self._safe_float(custom_rotation, float(rotation)),
+            )
+            resolved_size_mode = xform_data["size_mode"]
+
+            # Local mode keeps metadata dimensions as object-local semantics.
+            # Recomputing from world AABB would corrupt Length/Width after rotation.
+            if (
+                resolved_size_mode == "local"
+                and custom_length is not None
+                and custom_width is not None
+                and custom_height is not None
+            ):
+                length = float(custom_length)
+                width = float(custom_width)
+                height = float(custom_height)
+            else:
+                length = float(size_vec[0])
+                width = float(size_vec[1])
+                height = float(size_vec[2])
+
+            x = float(xform_data["X"])
+            y = float(xform_data["Y"])
+            rotation = float(xform_data["rotationZ"])
 
             if length <= 0.0 or width <= 0.0 or height <= 0.0:
                 omni.log.warn(f"Invalid bbox size for '{prim.GetPath()}': {size_vec}")
@@ -351,8 +498,15 @@ class StateMixin:
                 height,
                 x,
                 y,
+                object_name=custom.get("asset_placer.object_name"),
+                category=custom.get("asset_placer.category"),
+                search_prompt=custom.get("asset_placer.search_prompt"),
+                search_query=custom.get("asset_placer.search_query"),
+                size_mode=resolved_size_mode,
             )
-            omni.log.info(f"Attached placement metadata for '{prim.GetPath()}'")
+            omni.log.info(
+                f"Attached placement metadata for '{prim.GetPath()}' (size_mode={resolved_size_mode})"
+            )
             return True
         except Exception as exc:
             omni.log.warn(f"Failed to attach placement metadata for '{prim.GetPath()}': {exc}")

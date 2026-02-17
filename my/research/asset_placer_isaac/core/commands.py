@@ -1516,6 +1516,7 @@ class CommandsMixin:
                 category=category,
                 search_prompt=search_prompt,
                 search_query=search_query,
+                size_mode=size_mode,
             )
 
             translate_z = -min_z_after_rot_scale
@@ -1651,6 +1652,7 @@ class CommandsMixin:
             category=category,
             search_prompt=search_prompt,
             search_query=search_query,
+            size_mode=size_mode,
         )
         translate_z = -min_z_after_rot_scale
         translate_op.Set(Gf.Vec3d(x, y, translate_z))
@@ -2127,11 +2129,11 @@ class CommandsMixin:
 
     def _get_asset_up_axis(self, asset_url: str) -> str:
         """
-        アセットのupAxisを取得し、キャッシュする。未知・取得失敗時は'Y'を返す。
+        アセットのupAxisを取得し、キャッシュする。未知・取得失敗時は'Z'を返す。
         """
         if not asset_url:
-            omni.log.warn("[UpAxis] asset_url is empty. Fallback to 'Y'.")
-            return "Y"
+            omni.log.warn("[UpAxis] asset_url is empty. Fallback to 'Z'.")
+            return "Z"
 
         if not hasattr(self, "_asset_up_axis_cache"):
             self._asset_up_axis_cache = {}
@@ -2141,17 +2143,17 @@ class CommandsMixin:
             omni.log.info(f"[UpAxis] Cache hit: {asset_url} -> {cached}")
             return cached
 
-        up_axis = "Y"
+        up_axis = "Z"
         try:
             stage = Usd.Stage.Open(asset_url)
             if not stage:
-                omni.log.warn(f"[UpAxis] Failed to open stage for {asset_url}. Fallback to 'Y'.")
+                omni.log.warn(f"[UpAxis] Failed to open stage for {asset_url}. Fallback to 'Z'.")
             else:
                 axis_token = UsdGeom.GetStageUpAxis(stage)
                 up_axis = "Z" if axis_token == UsdGeom.Tokens.z else "Y"
                 omni.log.info(f"[UpAxis] Retrieved upAxis='{up_axis}' for {asset_url}")
         except Exception as exc:
-            omni.log.warn(f"[UpAxis] Error while getting upAxis for {asset_url}: {exc}. Fallback to 'Y'.")
+            omni.log.warn(f"[UpAxis] Error while getting upAxis for {asset_url}: {exc}. Fallback to 'Z'.")
 
         self._asset_up_axis_cache[asset_url] = up_axis
         return up_axis
