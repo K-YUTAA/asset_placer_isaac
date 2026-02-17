@@ -358,6 +358,9 @@ class StateMixin:
             )
         ):
             return "local"
+        # Local-mode affine-collapsed stack (translate:world + transform:affine)
+        if "xformOp:translate:world" in op_values and "xformOp:transform:affine" in op_values:
+            return "local"
         return "world"
 
     @staticmethod

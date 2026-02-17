@@ -1522,6 +1522,37 @@ class CommandsMixin:
             translate_z = -min_z_after_rot_scale
             translate_op.Set(Gf.Vec3d(x, y, translate_z))
 
+            # Collapse local-mode affine ops into a single transform op.
+            # This keeps the exact placement result, but avoids gizmo decomposition drift
+            # (manual translate unexpectedly changing orientation) caused by mixed
+            # non-uniform scale + multi-rotation stacks.
+            affine_ops = [rotate_world_op, scale_op, rotate_offset_op]
+            if rotate_up_op:
+                affine_ops.append(rotate_up_op)
+
+            affine_matrix = None
+            try:
+                affine_raw = UsdGeom.Xformable.GetLocalTransformation(affine_ops, time_code)
+                affine_matrix = affine_raw[0] if isinstance(affine_raw, tuple) else affine_raw
+            except Exception as exc:
+                omni.log.warn(f"[LocalMode] Failed to compute affine matrix from ops: {exc}")
+
+            if affine_matrix is not None:
+                try:
+                    for op in xformable.GetOrderedXformOps():
+                        prim.RemoveProperty(op.GetAttr().GetName())
+                    if hasattr(xformable, "ClearXformOpOrder"):
+                        xformable.ClearXformOpOrder()
+                    else:
+                        xformable.SetXformOpOrder([])
+                except Exception as exc:
+                    omni.log.warn(f"[LocalMode] Failed clearing xform ops for affine collapse: {exc}")
+
+                translate_final_op = xformable.AddTranslateOp(opSuffix="world")
+                affine_final_op = xformable.AddTransformOp(opSuffix="affine")
+                translate_final_op.Set(Gf.Vec3d(x, y, translate_z))
+                affine_final_op.Set(affine_matrix)
+
             omni.log.info(
                 "[LocalMode] "
                 f"object='{object_name}', category='{category}', size_mode={size_mode}, "
