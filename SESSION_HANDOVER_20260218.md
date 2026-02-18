@@ -48,20 +48,13 @@
 
 ## 4. 現在のGit状態（重要）
 - 現在ブランチ: `exp/eval-loop-v1`
-- 最新コミット（push済）: `a5d32ad`
-  - `feat: integrate eval-loop updates, local-mode fixes, and visualization improvements`
+- 最新コミット（push済）:
+  - `29df2ee` `feat: add step2 text-only mode and session handover reports`
+  - `a5d32ad` `feat: integrate eval-loop updates, local-mode fixes, and visualization improvements`
+- ワーキングツリー: clean（未コミットなし）
 
-### 未コミット変更（このセッション最後の状態）
-- `my/research/asset_placer_isaac/backend/ai_processing.py`
-- `my/research/asset_placer_isaac/core/commands.py`
-- `my/research/asset_placer_isaac/core/extension_app.py`
-- `my/research/asset_placer_isaac/core/settings.py`
-- `my/research/asset_placer_isaac/core/ui.py`
-- `my/research/asset_placer_isaac/extension_settings.json.example`
-- `experiments/REPORT_20260217_eval_loop_update.md`（新規）
-
-## 5. 今やっていること（未コミット差分の内容）
-- Extensionに **Step 2 text-onlyトグル** を追加中
+## 5. 今やっていること（現時点の実装状態）
+- Extensionに **Step 2 text-onlyトグル** を実装済み
   - UIチェックボックス: `Step 2 text-only (omit image + dimensions)`
   - ON時:
     - Step2の入力から画像を除外
@@ -73,11 +66,7 @@
 ## 6. これからやること（次セッションToDo）
 1. Isaac Sim上でUIトグル動作を実機確認
    - トグルOFF/ONでStep2 token usageと出力差分を比較
-2. 未コミット差分をコミット・プッシュ
-   - 推奨コミット単位:
-     - `feat: add step2 text-only toggle to omit image and dimensions`
-     - `docs: add eval-loop update report`
-3. 必要なら追加改善
+2. 必要なら追加改善
    - `core/commands.py` の重複 `_start_asset_search` 呼び出し解消
    - 文字化けコメント/ログ（`core/ui.py`, `backend/ai_processing.py`）の整理
    - 旧テスト参照（`test_absolute_scaling.py` の import先等）整合確認
@@ -88,14 +77,6 @@
 git status --short
 git branch --show-current
 git log -1 --oneline
-
-# 未コミット分の構文確認
-uv run python -m py_compile \
-  my/research/asset_placer_isaac/backend/ai_processing.py \
-  my/research/asset_placer_isaac/core/commands.py \
-  my/research/asset_placer_isaac/core/extension_app.py \
-  my/research/asset_placer_isaac/core/settings.py \
-  my/research/asset_placer_isaac/core/ui.py
 
 # レポート確認
 cat experiments/REPORT_20260217_eval_loop_update.md
