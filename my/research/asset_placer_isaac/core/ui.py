@@ -1348,6 +1348,9 @@ class UIMixin:
                     ui.Spacer(width=10)
                     ui.CheckBox(model=self._require_approval, width=18)
                     ui.Label("Require approval after image analysis", width=0)
+                with ui.HStack(height=22):
+                    ui.CheckBox(model=self._step2_text_only_mode, width=18)
+                    ui.Label("Step 2 text-only (omit image + dimensions)", width=0)
                 with ui.HStack(height=24):
                     self._cancel_ai_button = ui.Button("Cancel AI", clicked_fn=self._on_cancel_ai_click, width=120, height=24)
                     self._cancel_ai_button.visible = False

@@ -230,6 +230,12 @@ class MyExtension(SettingsMixin, StateMixin, UIMixin, HandlersMixin, CommandsMix
 
         # --- 承認ワークフロー用の状態管理 ---
         self._require_approval = ui.SimpleBoolModel(False)  # 承認ステップを挟むかどうか
+        self._step2_text_only_mode = ui.SimpleBoolModel(
+            bool(saved_settings.get("step2_text_only_mode", False))
+        )
+        self._step2_text_only_mode.add_value_changed_fn(
+            lambda m: self._save_settings_to_json()
+        )
         self._analysis_result = None  # Step 1の分析結果を保持
         self._approval_pending = False  # 承認待ち状態
         self._additional_context = ""  # 拒否時の追加コンテキスト

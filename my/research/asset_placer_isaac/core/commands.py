@@ -242,6 +242,9 @@ class CommandsMixin:
                 self._prompt2_path, "prompt_2.txt", DEFAULT_PROMPT2_TEXT, "Prompt 2"
             )
             json_size_mode = self._get_selected_json_size_mode()
+            step2_text_only_mode = bool(
+                getattr(self, "_step2_text_only_mode", None).as_bool
+            ) if hasattr(self, "_step2_text_only_mode") else False
             prompt2_text = self._apply_size_mode_override_to_prompt2(prompt2_text, json_size_mode)
             dimensions_text = self._read_text_with_fallback(self._dimensions_path, "Dimensions", required=True)
 
@@ -263,6 +266,9 @@ class CommandsMixin:
             omni.log.info(f"Prompt 1 source: {prompt1_source}")
             omni.log.info(f"Prompt 2 source: {prompt2_source}")
             omni.log.info(f"JSON size_mode for generation: {json_size_mode}")
+            omni.log.info(
+                f"Step 2 input mode: {'text-only (no image/dimensions)' if step2_text_only_mode else 'full (image+dimensions)'}"
+            )
 
             # 画像のBase64エンコード
             image_base64 = be.encode_image_to_base64(self._image_path)
@@ -326,6 +332,7 @@ class CommandsMixin:
                     "prompt2_text": prompt2_text,
                     "json_size_mode": json_size_mode,
                     "dimensions_text": dimensions_text,
+                    "step2_text_only_mode": step2_text_only_mode,
                     "model_name": model_name,
                     "step2_model_name": step2_model_name,
                     "ai_overrides": ai_overrides,
@@ -343,14 +350,23 @@ class CommandsMixin:
             # --- 3. ステップ2: JSON生成 (非同期呼び出し) ---
             omni.log.info("=== Step 2: Generating JSON ===")
             self._analysis_text_model.as_string += "\n\nGenerating... (Step 2: Creating JSON...)"
+            if step2_text_only_mode:
+                self._analysis_text_model.as_string += "\nStep 2 mode: text-only (image/dimensions omitted)."
+
+            step2_use_image = not step2_text_only_mode
+            step2_use_dimensions = not step2_text_only_mode
+            step2_dimensions_text = dimensions_text if step2_use_dimensions else ""
+            step2_image_base64 = image_base64 if step2_use_image else None
 
             layout_json, step2_stats = await be.step2_generate_json(
                 analysis_text,
-                dimensions_text,
-                image_base64,
+                step2_dimensions_text,
+                step2_image_base64,
                 prompt2_text,
                 step2_model_name,
                 api_key,
+                use_image=step2_use_image,
+                use_dimensions=step2_use_dimensions,
                 **ai_overrides,
             )
 
@@ -421,7 +437,7 @@ class CommandsMixin:
                 image_path=self._image_path,
                 prompt1_text=prompt1_text,
                 prompt2_text=prompt2_text,
-                dimensions_text=dimensions_text
+                dimensions_text=step2_dimensions_text
             )
             if log_path:
                 self._analysis_text_model.as_string += f"\nDetailed log saved to: {log_path}"
@@ -461,23 +477,36 @@ class CommandsMixin:
             prompt2_text = self._analysis_result["prompt2_text"]
             json_size_mode = self._analysis_result.get("json_size_mode") or self._get_selected_json_size_mode()
             dimensions_text = self._analysis_result["dimensions_text"]
+            step2_text_only_mode = bool(self._analysis_result.get("step2_text_only_mode", False))
             model_name = self._analysis_result["model_name"]
             step2_model_name = self._analysis_result.get("step2_model_name", model_name)
             ai_overrides = self._analysis_result.get("ai_overrides", {})
             api_key = self._analysis_result["api_key"]
             omni.log.info(f"JSON size_mode for generation: {json_size_mode}")
+            omni.log.info(
+                f"Step 2 input mode: {'text-only (no image/dimensions)' if step2_text_only_mode else 'full (image+dimensions)'}"
+            )
 
             # --- ステップ2: JSON生成 (非同期呼び出し) ---
             omni.log.info("=== Step 2: Generating JSON ===")
             self._analysis_text_model.as_string += "\n\nGenerating... (Step 2: Creating JSON...)"
+            if step2_text_only_mode:
+                self._analysis_text_model.as_string += "\nStep 2 mode: text-only (image/dimensions omitted)."
+
+            step2_use_image = not step2_text_only_mode
+            step2_use_dimensions = not step2_text_only_mode
+            step2_dimensions_text = dimensions_text if step2_use_dimensions else ""
+            step2_image_base64 = image_base64 if step2_use_image else None
 
             layout_json, step2_stats = await be.step2_generate_json(
                 analysis_text,
-                dimensions_text,
-                image_base64,
+                step2_dimensions_text,
+                step2_image_base64,
                 prompt2_text,
                 step2_model_name,
                 api_key,
+                use_image=step2_use_image,
+                use_dimensions=step2_use_dimensions,
                 **ai_overrides,
             )
 
@@ -549,7 +578,7 @@ class CommandsMixin:
                 image_path=self._image_path,
                 prompt1_text=prompt2_text, # ※このケースではStep2から開始
                 prompt2_text=prompt2_text,
-                dimensions_text=dimensions_text,
+                dimensions_text=step2_dimensions_text,
                 tag="step2_only"
             )
             if log_path:

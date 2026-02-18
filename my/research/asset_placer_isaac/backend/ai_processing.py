@@ -266,21 +266,23 @@ def _extract_json_from_text(text: str) -> Dict[str, Any]:
 
 def _build_responses_input(
     prompt_text: str,
-    image_base64: str,
+    image_base64: Optional[str],
     image_detail: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     detail = image_detail or DEFAULT_IMAGE_DETAIL
+    content: List[Dict[str, Any]] = [{"type": "input_text", "text": prompt_text}]
+    if image_base64:
+        content.append(
+            {
+                "type": "input_image",
+                "image_url": f"data:image/jpeg;base64,{image_base64}",
+                "detail": detail,
+            }
+        )
     return [
         {
             "role": "user",
-            "content": [
-                {"type": "input_text", "text": prompt_text},
-                {
-                    "type": "input_image",
-                    "image_url": f"data:image/jpeg;base64,{image_base64}",
-                    "detail": detail,
-                },
-            ],
+            "content": content,
         }
     ]
 
@@ -472,7 +474,7 @@ async def step1_analyze_image(
 async def step2_generate_json(
     analysis_text: str,
     dimensions_text: str,
-    image_base64: str,
+    image_base64: Optional[str],
     prompt2_base_text: str,
     model_name: str,
     api_key: Optional[str] = None,
@@ -482,6 +484,8 @@ async def step2_generate_json(
     image_detail: Optional[str] = None,
     max_retries: Optional[int] = None,
     retry_delay_sec: Optional[float] = None,
+    use_image: bool = True,
+    use_dimensions: bool = True,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     ????2: JSON???????????????
@@ -508,6 +512,17 @@ async def step2_generate_json(
 
     omni.log.info(f"--- ????2: JSON????????? (???: {model_name}) ---")
 
+    if use_dimensions:
+        dimensions_section = dimensions_text or "(No dimensions text provided.)"
+    else:
+        dimensions_section = "(Dimensions omitted for Step 2.)"
+
+    visual_mode_note = (
+        "Step 2 is running in text-only mode. Do not infer coordinates from any image."
+        if not use_image
+        else "Step 2 may use image context."
+    )
+
     final_prompt = f"""
 {prompt2_base_text}
 
@@ -515,8 +530,11 @@ async def step2_generate_json(
 The following is a detailed analysis of the furniture layout from the image. Use this as a guide for placement and orientation.
 {analysis_text}
 
+--- Step 2 Input Mode ---
+{visual_mode_note}
+
 --- Dimension Data for This Request ---
-{dimensions_text}
+{dimensions_section}
 """
 
     effective_reasoning_effort = reasoning_effort or DEFAULT_REASONING_EFFORT
@@ -526,7 +544,15 @@ The following is a detailed analysis of the furniture layout from the image. Use
     effective_text_verbosity = text_verbosity or DEFAULT_TEXT_VERBOSITY
     effective_image_detail = image_detail or DEFAULT_IMAGE_DETAIL
 
-    responses_input = _build_responses_input(final_prompt, image_base64, effective_image_detail)
+    include_image = bool(use_image and image_base64)
+    if use_image and not image_base64:
+        omni.log.warn("Step 2 image context was requested, but image_base64 is empty. Falling back to text-only Step 2.")
+
+    responses_input = _build_responses_input(
+        final_prompt,
+        image_base64 if include_image else None,
+        effective_image_detail,
+    )
 
     retry_limit = int(max_retries) if isinstance(max_retries, (int, float)) else 0
     if retry_limit < 0:
@@ -587,22 +613,25 @@ The following is a detailed analysis of the furniture layout from the image. Use
 
             if not response_text:
                 used_api = "chat.completions"
+                chat_content: List[Dict[str, Any]] = [{"type": "text", "text": final_prompt}]
+                if include_image:
+                    chat_content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}",
+                                "detail": effective_image_detail,
+                            },
+                        }
+                    )
+
                 response = await client.chat.completions.create(
                     model=model_name,
                     response_format={"type": "json_object"},
                     messages=[
                         {
                             "role": "user",
-                            "content": [
-                                {"type": "text", "text": final_prompt},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/jpeg;base64,{image_base64}",
-                                        "detail": effective_image_detail,
-                                    },
-                                },
-                            ],
+                            "content": chat_content,
                         }
                     ],
                     reasoning_effort=effective_reasoning_effort,
